@@ -1,0 +1,6 @@
+{
+  "name": "SkillTrack",
+  "description": "AI-Powered Skilling & Employment Intelligence Platform - Multi-tenant SaaS for skilling outcomes, gap analysis, and employment tracking (SIH26135).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
