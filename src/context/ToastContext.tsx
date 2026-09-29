@@ -13,6 +13,7 @@ export interface Toast {
 
 interface ToastContextType {
   showToast: (title: string, message?: string, type?: ToastType) => void;
+  addToast: (messageOrTitle: string, type?: ToastType) => void;
   removeToast: (id: string) => void;
 }
 
@@ -35,8 +36,12 @@ export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }, 4500);
   }, [removeToast]);
 
+  const addToast = useCallback((messageOrTitle: string, type: ToastType = 'info') => {
+    showToast(messageOrTitle, undefined, type);
+  }, [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast, removeToast }}>
+    <ToastContext.Provider value={{ showToast, addToast, removeToast }}>
       {children}
       <div className="fixed bottom-5 right-5 z-50 flex flex-col gap-2.5 max-w-md w-full pointer-events-none px-4">
         <AnimatePresence>

@@ -24,15 +24,13 @@ import {
 interface LandingPageProps {
   onOpenAuth: (mode?: 'signin' | 'signup') => void;
   onOpenDemo: () => void;
-  onOpenSchema: () => void;
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({
   onOpenAuth,
-  onOpenDemo,
-  onOpenSchema
+  onOpenDemo
 }) => {
-  const { quickDemoLogin, isSupabaseLive } = useAuth();
+  const { quickDemoLogin } = useAuth();
   const [activeWorkflowStep, setActiveWorkflowStep] = useState(0);
 
   const workflowSteps = [
@@ -90,33 +88,32 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             leftIcon={<Play className="w-3.5 h-3.5 text-amber-600" />}
             id="btn-hero-demo-login"
           >
-            Instant Demo Logins
+            Explore Interactive Demo
           </Button>
 
           <Button
             size="md"
             variant="outline"
-            onClick={onOpenSchema}
-            leftIcon={<Database className="w-3.5 h-3.5 text-indigo-600" />}
-            id="btn-hero-schema"
+            onClick={() => onOpenAuth('signin')}
+            id="btn-hero-signin"
           >
-            PostgreSQL & RLS Schema
+            Sign In to Portal
           </Button>
         </div>
 
-        {/* Live Architecture Status Bar */}
+        {/* Live Platform Assurance Bar */}
         <div className="mt-8 p-3 rounded-lg border border-slate-200 bg-white shadow-2xs max-w-2xl mx-auto flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-slate-600">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Multi-Tenant RLS: <strong className="text-slate-900">Active</strong></span>
+            <span>Platform Status: <strong className="text-slate-900">Operational</strong></span>
           </div>
           <div className="flex items-center gap-2 text-slate-600">
-            <Database className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Database: <strong className="text-slate-900">{isSupabaseLive ? 'Supabase PostgreSQL' : 'PostgreSQL Engine'}</strong></span>
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Data Governance: <strong className="text-slate-900">Tenant-Isolated & Protected</strong></span>
           </div>
           <div className="flex items-center gap-2 text-slate-600">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Tenant Isolation: <strong className="text-emerald-700 font-bold">Enforced</strong></span>
+            <Award className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Verification: <strong className="text-emerald-700 font-bold">Audit-Ready Integrity</strong></span>
           </div>
         </div>
       </section>
@@ -324,42 +321,48 @@ export const LandingPage: React.FC<LandingPageProps> = ({
         </div>
       </section>
 
-      {/* Multi-Tenant SaaS Architecture Explanation */}
+      {/* Multi-Organization Governance & Data Protection Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="p-6 rounded-xl border border-slate-200 bg-white shadow-sm flex flex-col lg:flex-row items-center justify-between gap-6">
-          <div className="space-y-2.5 max-w-xl">
+          <div className="space-y-3 max-w-xl">
             <div className="flex items-center gap-2">
-              <Badge variant="success">Tenant Isolation</Badge>
-              <span className="text-xs text-slate-500">Commercial Architecture</span>
+              <Badge variant="success">Institutional Data Privacy</Badge>
+              <span className="text-xs text-slate-500 font-medium">Enterprise Governance</span>
             </div>
             <h3 className="text-xl font-bold text-slate-900">
-              Multi-Tenant Architecture with Row Level Security
+              Multi-Organization Governance with Rigorous Tenant Isolation
             </h3>
-            <p className="text-xs text-slate-600 leading-relaxed">
-              SkillTrack is engineered so multiple customer organizations—such as the <strong>Government of Maharashtra Skilling Mission</strong>, <strong>TechSkills Foundation</strong>, and private CSR trusts—can independently deploy, track, and analyze programs with 100% data isolation.
+            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+              SkillTrack enables multiple participating entities—such as State Skilling Missions, Technical Education Directorates, Corporate CSR Foundations, and Training Providers—to run independently on one unified platform with guaranteed data isolation, role-based controls, and complete audit trails.
             </p>
             <div className="flex flex-wrap items-center gap-2.5 pt-2">
-              <Button size="sm" variant="primary" onClick={onOpenSchema} id="btn-view-rls-rules">
-                Inspect RLS Rules & SQL
+              <Button size="sm" variant="primary" onClick={() => onOpenAuth('signup')} id="btn-create-tenant-account">
+                Register Organization / Institute
               </Button>
-              <Button size="sm" variant="outline" onClick={() => onOpenAuth('signup')} id="btn-create-tenant-account">
-                Register New User
+              <Button size="sm" variant="outline" onClick={() => onOpenAuth('signin')} id="btn-signin-governance">
+                Sign In to Portal
               </Button>
             </div>
           </div>
 
-          <div className="w-full lg:w-96 rounded-lg border border-slate-800 bg-slate-900 p-4 font-mono text-[11px] text-slate-300 space-y-1.5 shadow-md">
-            <div className="text-slate-500">// Example RLS Enforcement:</div>
-            <div className="text-emerald-400">CREATE POLICY "Tenant Isolation"</div>
-            <div className="text-slate-400 pl-3">ON public.candidate_profiles FOR ALL</div>
-            <div className="text-indigo-300 pl-3">USING (</div>
-            <div className="text-slate-200 pl-6">organization_id = (</div>
-            <div className="text-amber-300 pl-9">SELECT organization_id FROM public.profiles</div>
-            <div className="text-amber-300 pl-9">WHERE auth_user_id = auth.uid()</div>
-            <div className="text-slate-200 pl-6">)</div>
-            <div className="text-indigo-300 pl-3">);</div>
-            <div className="pt-2 text-[10px] text-slate-400 border-t border-slate-800 flex items-center gap-1">
-              <span className="text-emerald-400">✓</span> Prevents cross-organization data leakage automatically
+          <div className="w-full lg:w-[420px] rounded-xl border border-slate-200 bg-slate-50 p-5 space-y-3 shadow-2xs">
+            <div className="text-xs font-bold text-slate-900 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              Institutional Security & Isolation Architecture
+            </div>
+            <div className="space-y-2.5 text-xs text-slate-600">
+              <div className="flex items-start gap-2">
+                <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                <span><strong>Role-Based Access Control:</strong> Candidates, recruiters, and providers cannot access other tenants or private candidate dossiers.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                <span><strong>Multi-Organization Partitioning:</strong> Data is strictly scoped to authorized organizations at the database query level.</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-emerald-600 font-bold shrink-0">✓</span>
+                <span><strong>Anti-Ghost Placement Auditing:</strong> Longitudinal retention records are triangulated with verified employer records.</span>
+              </div>
             </div>
           </div>
         </div>

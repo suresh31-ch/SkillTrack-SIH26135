@@ -11,7 +11,7 @@ import { OrganizationAdminDashboard } from './components/dashboards/organization
 import { AuthModal } from './components/auth/AuthModal';
 import { DemoAccountsModal } from './components/modals/DemoAccountsModal';
 import { TenantSwitcherModal } from './components/modals/TenantSwitcherModal';
-import { SQLSchemaModal } from './components/modals/SQLSchemaModal';
+import { DemoTourBanner } from './components/demo/DemoTourBanner';
 
 export function AppContent() {
   const { user, profile } = useAuth();
@@ -24,7 +24,6 @@ export function AppContent() {
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [isDemoOpen, setIsDemoOpen] = useState<boolean>(false);
-  const [isSchemaOpen, setIsSchemaOpen] = useState<boolean>(false);
   const [isTenantOpen, setIsTenantOpen] = useState<boolean>(false);
 
   const handleOpenAuth = (mode: 'signin' | 'signup' = 'signin') => {
@@ -42,7 +41,6 @@ export function AppContent() {
       <Header
         onOpenAuth={handleOpenAuth}
         onOpenDemo={() => setIsDemoOpen(true)}
-        onOpenSchema={() => setIsSchemaOpen(true)}
         onOpenTenantSwitcher={() => setIsTenantOpen(true)}
         sidebarOpen={sidebarOpen}
         onToggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -55,7 +53,6 @@ export function AppContent() {
           <LandingPage
             onOpenAuth={handleOpenAuth}
             onOpenDemo={() => setIsDemoOpen(true)}
-            onOpenSchema={() => setIsSchemaOpen(true)}
           />
         </main>
       ) : (
@@ -72,6 +69,7 @@ export function AppContent() {
 
           {/* Main Dashboard Canvas */}
           <div className="flex-1 flex flex-col min-w-0 h-[calc(100vh-4rem)] overflow-hidden">
+            <DemoTourBanner activeTab={activeTab} onNavigateTab={setActiveTab} />
             <main className="flex-1 p-4 sm:p-6 overflow-y-auto max-w-7xl w-full mx-auto space-y-6">
               {profile.role === 'candidate' && (
                 <CandidateDashboard activeTab={activeTab} onTabChange={setActiveTab} />
@@ -95,10 +93,10 @@ export function AppContent() {
               <div className="flex items-center gap-4">
                 <span className="flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                  System Status: Optimal
+                  System Status: Operational
                 </span>
-                <span className="hidden sm:inline">Sync Latency: 0.12ms</span>
-                <span className="hidden sm:inline">Multi-Tenant Isolation: Active (RLS)</span>
+                <span className="hidden sm:inline">Data Governance: Tenant-Isolated & Protected</span>
+                <span className="hidden sm:inline">Audit Readiness: 100%</span>
               </div>
               <div className="flex items-center gap-3 uppercase tracking-wider">
                 <span>© 2026 SkillTrack Intelligence</span>
@@ -126,11 +124,6 @@ export function AppContent() {
       <TenantSwitcherModal
         isOpen={isTenantOpen}
         onClose={() => setIsTenantOpen(false)}
-      />
-
-      <SQLSchemaModal
-        isOpen={isSchemaOpen}
-        onClose={() => setIsSchemaOpen(false)}
       />
     </div>
   );

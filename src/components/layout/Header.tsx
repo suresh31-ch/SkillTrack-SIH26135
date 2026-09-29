@@ -18,7 +18,6 @@ import {
 interface HeaderProps {
   onOpenAuth: (mode?: 'signin' | 'signup') => void;
   onOpenDemo: () => void;
-  onOpenSchema: () => void;
   onOpenTenantSwitcher: () => void;
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
@@ -27,12 +26,11 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onOpenDemo,
-  onOpenSchema,
   onOpenTenantSwitcher,
   sidebarOpen,
   onToggleSidebar
 }) => {
-  const { user, profile, organization, signOut, isSupabaseLive } = useAuth();
+  const { user, profile, organization, signOut, exitDemoMode, isDemoMode, isSupabaseLive } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const getRoleBadgeVariant = (role?: string) => {
@@ -111,29 +109,35 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Right Actions */}
         <div className="flex items-center gap-2.5">
-          {/* SQL Schema Inspector Button for Evaluators */}
-          <Button
-            size="sm"
-            variant="ghost"
-            leftIcon={<Database className="w-3.5 h-3.5 text-indigo-600" />}
-            onClick={onOpenSchema}
-            className="text-xs hidden sm:inline-flex text-slate-700 hover:text-slate-900"
-            id="btn-header-view-sql"
-          >
-            PostgreSQL / RLS
-          </Button>
-
           {/* Quick Demo Switcher */}
-          <Button
-            size="sm"
-            variant="secondary"
-            leftIcon={<Users className="w-3.5 h-3.5 text-amber-600" />}
-            onClick={onOpenDemo}
-            className="text-xs font-semibold"
-            id="btn-header-quick-demo"
-          >
-            Demo Accounts
-          </Button>
+          {isDemoMode ? (
+            <div className="flex items-center gap-1.5">
+              <span className="hidden md:inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-bold bg-amber-50 text-amber-900 border border-amber-300">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                Demo Active (Simulated)
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs text-amber-800 border-amber-300 hover:bg-amber-100 font-semibold"
+                onClick={exitDemoMode}
+                id="btn-header-exit-demo"
+              >
+                Exit Demo
+              </Button>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              variant="secondary"
+              leftIcon={<Users className="w-3.5 h-3.5 text-amber-600" />}
+              onClick={onOpenDemo}
+              className="text-xs font-semibold"
+              id="btn-header-quick-demo"
+            >
+              Demo Accounts
+            </Button>
+          )}
 
           {user && profile ? (
             <div className="relative">
@@ -179,15 +183,6 @@ export const Header: React.FC<HeaderProps> = ({
                   >
                     <Building2 className="w-4 h-4 text-slate-500" />
                     <span>Switch Tenant</span>
-                  </button>
-
-                  <button
-                    onClick={() => { setDropdownOpen(false); onOpenSchema(); }}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-700 hover:bg-slate-50 hover:text-slate-900 text-left transition-colors font-medium"
-                    id="btn-dropdown-schema"
-                  >
-                    <Database className="w-4 h-4 text-slate-500" />
-                    <span>PostgreSQL & RLS Schema</span>
                   </button>
 
                   <div className="my-1 border-t border-slate-100" />

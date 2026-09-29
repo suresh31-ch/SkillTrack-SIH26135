@@ -1,6 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { UserRole, Profile, Organization, CandidateProfile } from '../types';
-import { supabase, isSupabaseConfigured, LocalDbService } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, formatAuthError } from '../lib/supabase';
+import { LocalDbService } from '../lib/supabase';
 import { useToast } from './ToastContext';
 
 interface SignUpData {
@@ -20,10 +21,24 @@ interface AuthContextType {
   candidateProfile: CandidateProfile | null;
   isLoading: boolean;
   isSupabaseLive: boolean;
-  signIn: (email: string, password?: string) => Promise<{ success: boolean; error?: string }>;
-  signUp: (data: SignUpData) => Promise<{ success: boolean; error?: string }>;
+  isDemoMode: boolean;
+  signIn: (email: string, password?: string) => Promise<{
+    success: boolean;
+    error?: string;
+    unverified?: boolean;
+    email?: string;
+  }>;
+  signUp: (data: SignUpData) => Promise<{
+    success: boolean;
+    error?: string;
+    requiresVerification?: boolean;
+    email?: string;
+  }>;
   signOut: () => Promise<void>;
+  exitDemoMode: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
+  verifyEmail: (token: string, emailParam?: string) => Promise<{ success: boolean; error?: string }>;
+  resendVerificationEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
   quickDemoLogin: (role: UserRole, targetOrgId?: string) => Promise<void>;
   switchOrganization: (orgId: string) => void;
   refreshProfile: () => void;
@@ -31,143 +46,272 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const AUTH_SESSION_STORAGE_KEY = 'skilltrack_session_user';
-
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<{ id: string; email: string } | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('skilltrack_demo_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
   const isSupabaseLive = isSupabaseConfigured();
   const { showToast } = useToast();
 
-  const loadUserData = useCallback(async (authUserId: string, email: string) => {
+  // Load profile, tenant organization, and candidate profile
+  const loadUserData = useCallback(async (authUserId: string, email: string, userMetadata?: any) => {
     try {
-      // 1. Prioritize querying live Supabase PostgreSQL
+      let resolvedProfile: Profile | null = null;
+
+      // 1. Query public.profiles directly from Supabase
       if (isSupabaseLive && supabase) {
         try {
           const { data: p, error: pError } = await supabase
             .from('profiles')
             .select('*')
-            .or(`auth_user_id.eq.${authUserId},email.eq.${email}`)
+            .eq('id', authUserId)
             .maybeSingle();
 
           if (!pError && p) {
-            setProfile(p as Profile);
-
-            if (p.organization_id) {
-              const { data: org } = await supabase
-                .from('organizations')
-                .select('*')
-                .eq('id', p.organization_id)
-                .maybeSingle();
-              if (org) {
-                setOrganization(org as Organization);
-              } else {
-                setOrganization(LocalDbService.getOrganization(p.organization_id) || LocalDbService.getOrganizations()[0] || null);
-              }
-            }
-
-            if (p.role === 'candidate') {
-              const { data: cp } = await supabase
-                .from('candidate_profiles')
-                .select('*')
-                .eq('profile_id', p.id)
-                .maybeSingle();
-              if (cp) {
-                setCandidateProfile(cp as CandidateProfile);
-              } else {
-                setCandidateProfile(LocalDbService.getCandidateProfile(p.id) || null);
-              }
-            } else {
-              setCandidateProfile(null);
-            }
-            return;
+            resolvedProfile = p as Profile;
           }
         } catch (sErr) {
-          console.warn('Supabase profile load notice:', sErr);
+          console.warn('[SkillTrack Auth] Profile query note:', sErr);
         }
       }
 
-      // 2. Fallback to LocalDbService cache
-      const p = LocalDbService.getProfileByAuthId(authUserId) || LocalDbService.getProfileByEmail(email);
-      if (p) {
-        setProfile(p);
-        const org = LocalDbService.getOrganization(p.organization_id);
-        setOrganization(org || LocalDbService.getOrganizations()[0] || null);
+      // 2. If profile table query didn't return a record, synthesize from authenticated user metadata
+      if (!resolvedProfile) {
+        const metaRole = (userMetadata?.role || 'candidate').toLowerCase() as UserRole;
+        const metaFullName = userMetadata?.full_name || email.split('@')[0];
+        const metaPhone = userMetadata?.phone || '';
+        const metaOrgId = userMetadata?.organization_id || '00000000-0000-0000-0000-000000000001';
+        const metaDistrict = userMetadata?.district || 'Pune';
 
-        if (p.role === 'candidate') {
-          const cp = LocalDbService.getCandidateProfile(p.id);
-          setCandidateProfile(cp || null);
-        } else {
-          setCandidateProfile(null);
+        resolvedProfile = {
+          id: authUserId,
+          auth_user_id: authUserId,
+          full_name: metaFullName,
+          email: email.trim().toLowerCase(),
+          phone: metaPhone,
+          role: metaRole,
+          organization_id: metaOrgId,
+          district: metaDistrict,
+          email_verified: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      }
+
+      setProfile(resolvedProfile);
+
+      // 3. Resolve Organization
+      const orgId = resolvedProfile.organization_id || '00000000-0000-0000-0000-000000000001';
+      let resolvedOrg: Organization | null = null;
+      if (isSupabaseLive && supabase) {
+        try {
+          const { data: orgData } = await supabase
+            .from('organizations')
+            .select('*')
+            .eq('id', orgId)
+            .maybeSingle();
+          if (orgData) {
+            resolvedOrg = orgData as Organization;
+          }
+        } catch (orgErr) {
+          // ignore
         }
+      }
+
+      if (!resolvedOrg) {
+        resolvedOrg = LocalDbService.getOrganization(orgId) || LocalDbService.getOrganizations()[0] || null;
+      }
+      setOrganization(resolvedOrg);
+
+      // 4. Resolve Candidate Profile if role is candidate
+      if (resolvedProfile.role === 'candidate') {
+        let resolvedCp: CandidateProfile | null = null;
+        if (isSupabaseLive && supabase) {
+          try {
+            const { data: cpData } = await supabase
+              .from('candidate_profiles')
+              .select('*')
+              .eq('profile_id', resolvedProfile.id)
+              .maybeSingle();
+            if (cpData) {
+              resolvedCp = cpData as CandidateProfile;
+            }
+          } catch (cpErr) {
+            // ignore
+          }
+        }
+
+        if (!resolvedCp) {
+          resolvedCp = {
+            id: `cand-${authUserId}`,
+            profile_id: authUserId,
+            organization_id: orgId,
+            education: 'Bachelor of Technology (B.Tech)',
+            degree: 'Computer Science & Engineering',
+            graduation_year: 2025,
+            experience_years: 0,
+            target_job: 'Full Stack Web Developer',
+            readiness_score: 75,
+            profile_completion: 80,
+            employment_status: 'in_training',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        }
+        setCandidateProfile(resolvedCp);
       } else {
-        setProfile(null);
-        setOrganization(null);
         setCandidateProfile(null);
       }
     } catch (err) {
-      console.error('Error loading user data:', err);
+      console.error('[SkillTrack Auth] Error loading user data:', err);
     }
   }, [isSupabaseLive]);
 
-  // Initialize session on mount
+  // Real Supabase Email Verification Callback handling
+  const verifyEmail = useCallback(async (token: string, emailParam?: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      if (isSupabaseLive && supabase) {
+        // Handle OTP / token hash verification
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: token,
+          type: 'signup'
+        });
+
+        if (error) {
+          return { success: false, error: formatAuthError(error) };
+        }
+
+        if (data.session && data.user) {
+          const sessionUser = { id: data.user.id, email: data.user.email || emailParam || '' };
+          setUser(sessionUser);
+          await loadUserData(data.user.id, data.user.email || emailParam || '', data.user.user_metadata);
+          showToast('Email Verified', 'Your email has been verified. Welcome to SkillTrack!', 'success');
+          return { success: true };
+        }
+      }
+
+      showToast('Email Verified', 'Your email has been verified successfully. Please sign in.', 'success');
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: formatAuthError(err) };
+    }
+  }, [isSupabaseLive, loadUserData, showToast]);
+
+  // Real Supabase Resend Verification Email
+  const resendVerificationEmail = useCallback(async (email: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!normalizedEmail) {
+        return { success: false, error: 'Please enter a valid email address.' };
+      }
+
+      if (isSupabaseLive && supabase) {
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email: normalizedEmail
+        });
+
+        if (error) {
+          return { success: false, error: formatAuthError(error) };
+        }
+
+        showToast(
+          'Verification Link Sent',
+          `A new activation email has been dispatched to ${normalizedEmail}. Please check your inbox.`,
+          'success'
+        );
+        return { success: true };
+      }
+
+      return { success: false, error: 'Authentication service is unavailable.' };
+    } catch (err: any) {
+      return { success: false, error: formatAuthError(err) };
+    }
+  }, [isSupabaseLive, showToast]);
+
+  // Initialize session and listen to Supabase Auth state changes
   useEffect(() => {
+    let isMounted = true;
+
     const initAuth = async () => {
       setIsLoading(true);
       try {
+        // Handle URL tokens from email confirmation link
+        const params = new URLSearchParams(window.location.search);
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const tokenHash = params.get('token_hash') || params.get('token');
+        const code = params.get('code');
+
+        if (tokenHash) {
+          await verifyEmail(tokenHash, params.get('email') || undefined);
+        } else if (code && isSupabaseLive && supabase) {
+          await supabase.auth.exchangeCodeForSession(code);
+        }
+
+        // Clean query/hash parameters from URL
+        if (tokenHash || code || hashParams.has('access_token')) {
+          const cleanUrl = window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+
+        // Get current real Supabase session
         if (isSupabaseLive && supabase) {
           const { data: { session } } = await supabase.auth.getSession();
-          if (session?.user) {
-            setUser({ id: session.user.id, email: session.user.email || '' });
-            await loadUserData(session.user.id, session.user.email || '');
-          } else {
-            // Check fallback session
-            const saved = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
-            if (saved) {
-              const parsed = JSON.parse(saved);
-              setUser(parsed);
-              await loadUserData(parsed.id, parsed.email);
-            }
-          }
-        } else {
-          const saved = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
-          if (saved) {
-            const parsed = JSON.parse(saved);
-            setUser(parsed);
-            await loadUserData(parsed.id, parsed.email);
+          if (session?.user && isMounted) {
+            const sessionUser = { id: session.user.id, email: session.user.email || '' };
+            setUser(sessionUser);
+            await loadUserData(session.user.id, session.user.email || '', session.user.user_metadata);
           }
         }
       } catch (err) {
-        console.error('Auth initialization error:', err);
+        console.error('[SkillTrack Auth] Session restoration note:', err);
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
     initAuth();
 
-    // Listen to Supabase Auth state changes if live
+    // Setup single real Supabase Auth state listener
+    let authListener: { subscription: { unsubscribe: () => void } } | null = null;
     if (isSupabaseLive && supabase) {
-      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-        if (session?.user) {
-          setUser({ id: session.user.id, email: session.user.email || '' });
-          await loadUserData(session.user.id, session.user.email || '');
-        } else {
-          const saved = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
-          if (!saved) {
-            setUser(null);
-            setProfile(null);
-            setOrganization(null);
-            setCandidateProfile(null);
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (!isMounted) return;
+
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          if (session?.user) {
+            const sessionUser = { id: session.user.id, email: session.user.email || '' };
+            setUser(sessionUser);
+            await loadUserData(session.user.id, session.user.email || '', session.user.user_metadata);
           }
+        } else if (event === 'SIGNED_OUT') {
+          setUser(null);
+          setProfile(null);
+          setOrganization(null);
+          setCandidateProfile(null);
         }
       });
-      return () => subscription.unsubscribe();
+      authListener = data;
     }
-  }, [isSupabaseLive, loadUserData]);
+
+    return () => {
+      isMounted = false;
+      if (authListener?.subscription) {
+        authListener.subscription.unsubscribe();
+      }
+    };
+  }, [isSupabaseLive, loadUserData, verifyEmail]);
 
   const refreshProfile = useCallback(() => {
     if (user) {
@@ -175,231 +319,396 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [user, loadUserData]);
 
-  const signIn = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
+  // REAL SUPABASE SIGN IN
+  const signIn = async (email: string, password?: string): Promise<{
+    success: boolean;
+    error?: string;
+    unverified?: boolean;
+    email?: string;
+  }> => {
     setIsLoading(true);
-    try {
-      if (isSupabaseLive && supabase && password) {
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password: password.trim()
-        });
-        if (error) {
-          console.warn('Supabase signIn notice, checking local DB:', error.message);
-        } else if (data?.user) {
-          setUser({ id: data.user.id, email: data.user.email || email });
-          await loadUserData(data.user.id, data.user.email || email);
-          localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify({ id: data.user.id, email: data.user.email || email }));
-          showToast('Welcome back!', `Signed in as ${data.user.email}`, 'success');
-          return { success: true };
-        }
-      }
+    const normalizedEmail = email.trim().toLowerCase();
+    const cleanPassword = password?.trim() || '';
 
-      // Check Local DB Profiles
-      const existingProfile = LocalDbService.getProfileByEmail(email);
-      if (!existingProfile) {
+    try {
+      if (!normalizedEmail || !cleanPassword) {
         return {
           success: false,
-          error: 'No account found with this email address. Please register or use quick demo login.'
+          error: 'Please enter both your email address and password.'
         };
       }
 
-      const authId = existingProfile.auth_user_id || `auth-${Date.now()}`;
-      const sessionUser = { id: authId, email: existingProfile.email };
-      setUser(sessionUser);
-      await loadUserData(authId, existingProfile.email);
-      localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
-      showToast('Welcome back!', `Signed in as ${existingProfile.full_name}`, 'success');
-      return { success: true };
+      if (!isSupabaseLive || !supabase) {
+        return {
+          success: false,
+          error: 'Unable to connect to Supabase. Please check your internet connection and try again.'
+        };
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normalizedEmail,
+        password: cleanPassword
+      });
+
+      if (error) {
+        const msg = error.message.toLowerCase();
+        const isUnconfirmed = error.code === 'email_not_confirmed' ||
+          msg.includes('email not confirmed') ||
+          msg.includes('email_not_confirmed') ||
+          msg.includes('email not verified');
+
+        if (isUnconfirmed) {
+          return {
+            success: false,
+            error: 'Please verify your email before signing in.',
+            unverified: true,
+            email: normalizedEmail
+          };
+        }
+
+        if (error.code === 'invalid_credentials' || msg.includes('invalid login credentials') || msg.includes('invalid email or password')) {
+          return {
+            success: false,
+            error: 'Invalid email or password.'
+          };
+        }
+
+        return {
+          success: false,
+          error: formatAuthError(error)
+        };
+      }
+
+      if (data?.session && data.user) {
+        const sessionUser = { id: data.user.id, email: data.user.email || normalizedEmail };
+        setUser(sessionUser);
+        await loadUserData(data.user.id, data.user.email || normalizedEmail, data.user.user_metadata);
+        showToast('Welcome back!', `Signed in as ${data.user.email || normalizedEmail}`, 'success');
+        return { success: true };
+      }
+
+      return {
+        success: false,
+        error: 'Login could not be completed. Please check your credentials.'
+      };
     } catch (err: any) {
-      console.error('Sign in error:', err);
-      return { success: false, error: err.message || 'Authentication failed' };
+      console.error('[SkillTrack Auth] Sign In exception:', err);
+      return {
+        success: false,
+        error: formatAuthError(err)
+      };
     } finally {
       setIsLoading(false);
     }
   };
 
-  const signUp = async (data: SignUpData): Promise<{ success: boolean; error?: string }> => {
+  // REAL SUPABASE SIGN UP
+  const signUp = async (data: SignUpData): Promise<{
+    success: boolean;
+    error?: string;
+    requiresVerification?: boolean;
+    email?: string;
+  }> => {
     setIsLoading(true);
+    const cleanFullName = data.fullName.trim();
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const cleanPassword = data.password?.trim() || '';
+    const cleanPhone = data.phone?.trim() || '';
+    const cleanDistrict = data.district?.trim() || 'Pune';
+    const role = data.role;
+    const organizationId = data.organizationId || '00000000-0000-0000-0000-000000000001';
+
     try {
-      if (data.role === 'organization_admin') {
+      if (!cleanFullName || cleanFullName.length < 2) {
+        return {
+          success: false,
+          error: 'Full name is required (at least 2 characters).'
+        };
+      }
+
+      if (!normalizedEmail) {
+        return {
+          success: false,
+          error: 'A valid email address is required.'
+        };
+      }
+
+      if (!cleanPassword || cleanPassword.length < 6) {
+        return {
+          success: false,
+          error: 'Password must be at least 6 characters in length.'
+        };
+      }
+
+      if (role === 'organization_admin') {
         return {
           success: false,
           error: 'Organization Administrator accounts cannot be created via public registration.'
         };
       }
 
-      const existingProfile = LocalDbService.getProfileByEmail(data.email);
-      if (existingProfile) {
+      if (!isSupabaseLive || !supabase) {
         return {
           success: false,
-          error: 'An account with this email address already exists. Please sign in.'
+          error: 'Unable to connect to Supabase. Please check your internet connection and try again.'
         };
       }
 
-      let authId = `auth-${Date.now()}`;
-
-      if (isSupabaseLive && supabase && data.password) {
-        try {
-          const { data: authData, error: authError } = await supabase.auth.signUp({
-            email: data.email.trim(),
-            password: data.password.trim(),
-            options: {
-              data: {
-                full_name: data.fullName,
-                role: data.role,
-                organization_id: data.organizationId
-              }
-            }
-          });
-          if (!authError && authData?.user) {
-            authId = authData.user.id;
-
-            // Upsert directly to profiles table in Supabase
-            const { data: remoteProfile } = await supabase
-              .from('profiles')
-              .upsert({
-                auth_user_id: authId,
-                full_name: data.fullName,
-                email: data.email.trim(),
-                phone: data.phone,
-                role: data.role,
-                organization_id: data.organizationId,
-                district: data.district || 'Pune'
-              })
-              .select()
-              .maybeSingle();
-
-            if (data.role === 'candidate' && remoteProfile?.id) {
-              await supabase
-                .from('candidate_profiles')
-                .upsert({
-                  profile_id: remoteProfile.id,
-                  organization_id: data.organizationId,
-                  education: 'Bachelor of Technology (B.Tech)',
-                  degree: 'Computer Engineering',
-                  graduation_year: 2025,
-                  experience_years: 0,
-                  employment_status: 'in_training',
-                  target_job: 'Full Stack Web Developer',
-                  readiness_score: 75,
-                  profile_completion: 80
-                });
-            }
+      // Invoke real Supabase Auth signUp
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: normalizedEmail,
+        password: cleanPassword,
+        options: {
+          data: {
+            full_name: cleanFullName,
+            role,
+            organization_id: organizationId,
+            district: cleanDistrict,
+            phone: cleanPhone
           }
-        } catch (sErr) {
-          console.warn('Supabase remote sign up notice:', sErr);
         }
-      }
-
-      // Create relational profile in local cache
-      const newProfile = LocalDbService.createProfile({
-        auth_user_id: authId,
-        full_name: data.fullName,
-        email: data.email.trim(),
-        phone: data.phone,
-        role: data.role,
-        organization_id: data.organizationId,
-        district: data.district || 'Pune'
       });
 
-      const sessionUser = { id: authId, email: data.email };
-      setUser(sessionUser);
-      setProfile(newProfile);
-      setOrganization(LocalDbService.getOrganization(newProfile.organization_id) || null);
-      if (newProfile.role === 'candidate') {
-        setCandidateProfile(LocalDbService.getCandidateProfile(newProfile.id) || null);
+      if (authError) {
+        return {
+          success: false,
+          error: formatAuthError(authError)
+        };
       }
-      localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
 
-      showToast(
-        'Registration Successful',
-        `Account created for ${newProfile.full_name} (${newProfile.role.replace('_', ' ')})`,
-        'success'
-      );
+      // Check if user already exists:
+      // When email confirmation is enabled and user already exists, Supabase returns a user with empty identities []
+      if (authData?.user && Array.isArray(authData.user.identities) && authData.user.identities.length === 0) {
+        return {
+          success: false,
+          error: 'This email is already registered. Please sign in or reset your password.'
+        };
+      }
 
-      return { success: true };
+      if (authData?.user) {
+        const authId = authData.user.id;
+        const session = authData.session;
+        const isConfirmed = Boolean(authData.user.email_confirmed_at || session);
+
+        // Attempt creating public.profiles record
+        try {
+          await supabase
+            .from('profiles')
+            .upsert({
+              id: authId,
+              auth_user_id: authId,
+              full_name: cleanFullName,
+              email: normalizedEmail,
+              phone: cleanPhone,
+              role,
+              organization_id: organizationId,
+              district: cleanDistrict,
+              verification_status: isConfirmed ? 'verified' : 'pending',
+              profile_completion: role === 'candidate' ? 80 : 60
+            });
+        } catch (pErr) {
+          console.warn('[SkillTrack Auth] Profile upsert notice:', pErr);
+        }
+
+        // Case 1: Session returned immediately (Auto-confirm or confirmation disabled)
+        if (session) {
+          const sessionUser = { id: authId, email: normalizedEmail };
+          setUser(sessionUser);
+          await loadUserData(authId, normalizedEmail, authData.user.user_metadata);
+          showToast('Registration Successful', `Welcome to SkillTrack, ${cleanFullName}!`, 'success');
+          return {
+            success: true,
+            requiresVerification: false,
+            email: normalizedEmail
+          };
+        }
+
+        // Case 2: Email verification required
+        showToast(
+          'Verification Required',
+          'Registration successful. Please check your email and verify your account before signing in.',
+          'info'
+        );
+
+        return {
+          success: true,
+          requiresVerification: true,
+          email: normalizedEmail
+        };
+      }
+
+      return {
+        success: false,
+        error: 'Registration could not be completed. Please try again.'
+      };
     } catch (err: any) {
-      console.error('Sign up error:', err);
-      return { success: false, error: err.message || 'Registration failed' };
+      console.error('[SkillTrack Auth] Sign Up exception:', err);
+      return {
+        success: false,
+        error: formatAuthError(err)
+      };
     } finally {
       setIsLoading(false);
     }
   };
 
+  // REAL SUPABASE SIGN OUT
   const signOut = async (): Promise<void> => {
     setIsLoading(true);
     try {
       if (isSupabaseLive && supabase) {
         await supabase.auth.signOut().catch(() => {});
       }
-      localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+      setIsDemoMode(false);
+      try {
+        localStorage.removeItem('skilltrack_demo_mode');
+      } catch {}
       setUser(null);
       setProfile(null);
       setOrganization(null);
       setCandidateProfile(null);
       showToast('Signed Out', 'You have been safely signed out.', 'info');
     } catch (err) {
-      console.error('Sign out error:', err);
+      console.error('[SkillTrack Auth] Sign out error:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
+  // EXPLICIT EXIT DEMO MODE
+  const exitDemoMode = async (): Promise<void> => {
+    setIsLoading(true);
+    try {
+      setIsDemoMode(false);
+      try {
+        localStorage.removeItem('skilltrack_demo_mode');
+      } catch {}
+      setUser(null);
+      setProfile(null);
+      setOrganization(null);
+      setCandidateProfile(null);
+      showToast('Exited Demo Mode', 'Returned to standard application state.', 'info');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // REAL SUPABASE RESET PASSWORD
   const resetPassword = async (email: string): Promise<{ success: boolean; error?: string }> => {
     try {
-      if (isSupabaseLive && supabase) {
-        const { error } = await supabase.auth.resetPasswordForEmail(email);
-        if (error) throw error;
+      const normalizedEmail = email.trim().toLowerCase();
+      if (!normalizedEmail) {
+        return { success: false, error: 'Please enter a valid email address.' };
       }
+
+      if (isSupabaseLive && supabase) {
+        const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail);
+        if (error) {
+          return { success: false, error: formatAuthError(error) };
+        }
+      }
+
       showToast(
-        'Password Reset Email Sent',
-        `If an account exists for ${email}, password reset instructions have been dispatched.`,
+        'Password Reset Email Dispatched',
+        `If an account exists for ${normalizedEmail}, password reset instructions have been sent.`,
         'info'
       );
       return { success: true };
     } catch (err: any) {
-      return { success: false, error: err.message || 'Failed to dispatch reset email' };
+      return { success: false, error: formatAuthError(err) };
     }
   };
 
+  // ISOLATED DEMO LOGIN (Separated clearly from real auth, as requested in Req 20)
   const quickDemoLogin = async (role: UserRole, targetOrgId?: string): Promise<void> => {
     setIsLoading(true);
     try {
-      const allProfiles = LocalDbService.getProfiles();
-      let matchedProfile = allProfiles.find(p => p.role === role);
+      const demoAccounts: Record<UserRole, { id: string; authId: string; email: string; name: string; orgId: string }> = {
+        candidate: {
+          id: 'prof-cand-001',
+          authId: 'auth-cand-001',
+          email: 'candidate@skilltrack.io',
+          name: 'Aarav Patil',
+          orgId: 'org-maha-001'
+        },
+        recruiter: {
+          id: 'prof-recr-001',
+          authId: 'auth-recr-001',
+          email: 'recruiter@skilltrack.io',
+          name: 'Pooja Deshmukh',
+          orgId: 'org-maha-001'
+        },
+        training_center: {
+          id: 'prof-tc-001',
+          authId: 'auth-tc-001',
+          email: 'training@skilltrack.io',
+          name: 'Prof. Rajesh Kulkarni',
+          orgId: 'org-maha-001'
+        },
+        organization_admin: {
+          id: 'prof-admin-001',
+          authId: 'auth-admin-001',
+          email: 'admin@skilltrack.io',
+          name: 'Dr. Sunita Shinde, IAS',
+          orgId: 'org-maha-001'
+        }
+      };
 
-      if (!matchedProfile) {
-        const defaultOrg = targetOrgId || LocalDbService.getOrganizations()[0]?.id || 'org-maha-001';
-        matchedProfile = LocalDbService.createProfile({
-          auth_user_id: `auth-${role}-demo`,
-          full_name: role === 'candidate' ? 'Aarav Patil' :
-                     role === 'recruiter' ? 'Pooja Deshmukh' :
-                     role === 'training_center' ? 'Prof. Rajesh Kulkarni' : 'Dr. Sunita Shinde, IAS',
-          email: `${role}@skilltrack.io`,
-          role,
-          organization_id: defaultOrg,
-          district: 'Pune'
+      const demo = demoAccounts[role];
+      const orgId = targetOrgId || demo.orgId || 'org-maha-001';
+
+      const demoUser = { id: demo.authId, email: demo.email };
+      setUser(demoUser);
+
+      const demoProfile: Profile = {
+        id: demo.id,
+        auth_user_id: demo.authId,
+        full_name: demo.name,
+        email: demo.email,
+        phone: '+91 98230 45678',
+        role,
+        organization_id: orgId,
+        district: 'Pune',
+        email_verified: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      setProfile(demoProfile);
+      setOrganization(LocalDbService.getOrganization(orgId) || LocalDbService.getOrganizations()[0]);
+
+      if (role === 'candidate') {
+        const cp = LocalDbService.getCandidateProfile(demo.id);
+        setCandidateProfile(cp || {
+          id: 'cand-prof-001',
+          profile_id: demo.id,
+          organization_id: orgId,
+          education: 'Bachelor of Technology (B.Tech)',
+          degree: 'Computer Engineering',
+          graduation_year: 2025,
+          experience_years: 1,
+          target_job: 'Full Stack Web Developer',
+          readiness_score: 84,
+          profile_completion: 92,
+          employment_status: 'placed',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
         });
-      }
-
-      const sessionUser = { id: matchedProfile.auth_user_id, email: matchedProfile.email };
-      setUser(sessionUser);
-      setProfile(matchedProfile);
-      setOrganization(LocalDbService.getOrganization(matchedProfile.organization_id) || LocalDbService.getOrganizations()[0]);
-      if (matchedProfile.role === 'candidate') {
-        setCandidateProfile(LocalDbService.getCandidateProfile(matchedProfile.id) || null);
       } else {
         setCandidateProfile(null);
       }
-      localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(sessionUser));
+
+      setIsDemoMode(true);
+      try {
+        localStorage.setItem('skilltrack_demo_mode', 'true');
+      } catch {}
 
       showToast(
-        'Demo Login Active',
-        `Logged in as ${matchedProfile.full_name} (${role.replace('_', ' ')})`,
-        'success'
+        'Demo Mode Active',
+        `Logged in as Demo ${role.replace('_', ' ').toUpperCase()} (${demo.name})`,
+        'info'
       );
     } catch (err) {
-      console.error('Quick demo login error:', err);
+      console.error('[SkillTrack Auth] Quick demo login error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -427,10 +736,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         candidateProfile,
         isLoading,
         isSupabaseLive,
+        isDemoMode,
         signIn,
         signUp,
         signOut,
+        exitDemoMode,
         resetPassword,
+        verifyEmail,
+        resendVerificationEmail,
         quickDemoLogin,
         switchOrganization,
         refreshProfile

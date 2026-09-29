@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             section: 'Learning & Practice',
             items: [
               { id: 'ai_roadmap', label: 'AI Roadmap', icon: <Map className="w-4 h-4" /> },
-              { id: 'learning', label: 'Learning', icon: <BookOpen className="w-4 h-4" /> },
+              { id: 'learning', label: 'Learning Hub', icon: <GraduationCap className="w-4 h-4" /> },
               { id: 'assessments', label: 'Assessments', icon: <CheckSquare className="w-4 h-4" /> },
               { id: 'code_lab', label: 'Code Lab', icon: <Code2 className="w-4 h-4" /> },
               { id: 'certifications', label: 'Certifications', icon: <Award className="w-4 h-4" /> }
@@ -97,17 +97,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             section: 'Recruitment Hub',
             items: [
               { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
-              { id: 'company_profile', label: 'Company Profile', icon: <Building className="w-4 h-4" /> },
-              { id: 'post_job', label: 'Post Job', icon: <PlusCircle className="w-4 h-4" /> },
-              { id: 'my_jobs', label: 'My Jobs', icon: <Briefcase className="w-4 h-4" /> }
+              { id: 'jobs', label: 'Jobs', icon: <Briefcase className="w-4 h-4" /> },
+              { id: 'applicants', label: 'Applicants', icon: <Users className="w-4 h-4" /> },
+              { id: 'candidates', label: 'Candidates', icon: <Search className="w-4 h-4" /> },
+              { id: 'pipeline', label: 'Pipeline', icon: <Layers className="w-4 h-4" /> }
             ]
           },
           {
-            section: 'Talent Sourcing',
+            section: 'Operations',
             items: [
-              { id: 'candidate_search', label: 'Candidate Search', icon: <Search className="w-4 h-4" /> },
-              { id: 'shortlisted', label: 'Shortlisted', icon: <BookmarkCheck className="w-4 h-4" /> },
-              { id: 'applications', label: 'Applications', icon: <Send className="w-4 h-4" /> }
+              { id: 'post_job', label: 'Post Job', icon: <PlusCircle className="w-4 h-4" /> },
+              { id: 'company_profile', label: 'Company Profile', icon: <Building className="w-4 h-4" /> }
             ]
           }
         ];
@@ -252,7 +252,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           )}
           <div className="flex items-center justify-between px-2 pt-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-            <span>V 1.0.4 • RLS Active</span>
+            <span>SkillTrack Enterprise</span>
             <div className="flex items-center gap-1.5">
               <span className="text-emerald-400 text-[9px]">ONLINE</span>
               <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>

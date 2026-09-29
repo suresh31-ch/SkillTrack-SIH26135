@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import {
   Organization,
   Profile,
+  LocalAuthCredential,
   CandidateProfile,
   Skill,
   JobRole,
@@ -28,6 +29,7 @@ import {
 import {
   SEED_ORGANIZATIONS,
   SEED_PROFILES,
+  SEED_AUTH_CREDENTIALS,
   SEED_CANDIDATE_PROFILES,
   SEED_SKILLS,
   SEED_CANDIDATE_SKILLS,
@@ -53,21 +55,58 @@ import {
 } from './mockData';
 
 const env = (import.meta as any).env || {};
-const supabaseUrl = env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || '';
+export const rawSupabaseUrl = env.VITE_SUPABASE_URL || '';
+export const rawSupabaseAnonKey = env.VITE_SUPABASE_ANON_KEY || '';
 
 export const isSupabaseConfigured = (): boolean => {
   return Boolean(
-    supabaseUrl &&
-    supabaseAnonKey &&
-    supabaseUrl.startsWith('https://') &&
-    !supabaseUrl.includes('your-project')
+    rawSupabaseUrl &&
+    rawSupabaseAnonKey &&
+    rawSupabaseUrl.startsWith('https://') &&
+    !rawSupabaseUrl.includes('your-project')
   );
 };
 
-export const supabase: SupabaseClient | null = isSupabaseConfigured()
-  ? createClient(supabaseUrl, supabaseAnonKey)
-  : null;
+export function formatAuthError(err: any): string {
+  if (!err) return 'An unexpected error occurred.';
+  const msg = typeof err === 'string' ? err : (err.message || err.error_description || err.error || JSON.stringify(err));
+  const lower = msg.toLowerCase();
+  
+  if (lower.includes('failed to fetch') || lower.includes('network') || lower.includes('abort') || lower.includes('enotfound')) {
+    return 'Unable to connect to Supabase. Please check your internet connection and try again.';
+  }
+  if (lower.includes('already registered') || lower.includes('already exists') || lower.includes('unique constraint') || lower.includes('user_already_exists')) {
+    return 'This email is already registered. Please sign in or reset your password.';
+  }
+  if (lower.includes('email not confirmed') || lower.includes('email_not_confirmed') || lower.includes('not verified') || lower.includes('unverified')) {
+    return 'Please verify your email before signing in.';
+  }
+  if (lower.includes('invalid login credentials') || lower.includes('invalid_grant') || lower.includes('invalid email or password') || lower.includes('invalid_credentials')) {
+    return 'Invalid email or password.';
+  }
+  if (lower.includes('weak_password') || lower.includes('at least 6 characters')) {
+    return 'Password must be at least 6 characters in length.';
+  }
+  if (lower.includes('permission denied') || lower.includes('42501')) {
+    return 'Database permission error (42501). Please run migration 20260829000004_fix_auth_rls_and_grants.sql in Supabase SQL Editor.';
+  }
+  if (lower.includes('could not find the table') || lower.includes('pgrst205')) {
+    return 'Database table missing from schema. Please run migration 20260829000003_complete_backend_foundation.sql in Supabase SQL Editor.';
+  }
+  return msg;
+}
+
+export const supabase: SupabaseClient = createClient(
+  rawSupabaseUrl,
+  rawSupabaseAnonKey,
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  }
+);
 
 // =========================================================================
 // LOCAL STORAGE & PERSISTENT POSTGRESQL-COMPATIBLE ENGINE
@@ -99,6 +138,7 @@ const STORAGE_KEYS = {
   JOB_ROLE_SKILLS: 'st_db_job_role_skills_v1',
   ROADMAP_ITEMS: 'st_db_roadmap_items_v1',
   CANDIDATE_ROADMAP_PROGRESS: 'st_db_candidate_roadmap_progress_v1',
+  AUTH_CREDENTIALS: 'st_db_auth_credentials_v1',
   AUTH_SESSION: 'st_auth_session_v1'
 };
 
@@ -162,6 +202,116 @@ export class LocalDbService {
     return this.getProfiles().find(p => p.email.toLowerCase() === email.toLowerCase());
   }
 
+  // =========================================================================
+  // AUTHENTICATION CREDENTIAL & VERIFICATION ENGINE
+  // =========================================================================
+
+  static getAuthCredentials(): LocalAuthCredential[] {
+    const creds = getStorage<LocalAuthCredential[]>(STORAGE_KEYS.AUTH_CREDENTIALS, SEED_AUTH_CREDENTIALS);
+    let updated = false;
+    for (const seed of SEED_AUTH_CREDENTIALS) {
+      if (!creds.some(c => c.email.toLowerCase() === seed.email.toLowerCase())) {
+        creds.push(seed);
+        updated = true;
+      }
+    }
+    if (updated) {
+      setStorage(STORAGE_KEYS.AUTH_CREDENTIALS, creds);
+    }
+    return creds;
+  }
+
+  static getAuthCredentialByEmail(email: string): LocalAuthCredential | undefined {
+    if (!email) return undefined;
+    return this.getAuthCredentials().find(c => c.email.toLowerCase() === email.trim().toLowerCase());
+  }
+
+  static getAuthCredentialByToken(token: string): LocalAuthCredential | undefined {
+    if (!token) return undefined;
+    return this.getAuthCredentials().find(c => c.verification_token === token);
+  }
+
+  static createAuthCredential(data: {
+    auth_user_id: string;
+    email: string;
+    password_hash: string;
+    salt: string;
+    email_verified?: boolean;
+    verification_token?: string;
+  }): LocalAuthCredential {
+    const creds = this.getAuthCredentials();
+    const normalizedEmail = data.email.trim().toLowerCase();
+    const existingIndex = creds.findIndex(c => c.email.toLowerCase() === normalizedEmail);
+    const newCred: LocalAuthCredential = {
+      id: data.auth_user_id,
+      email: normalizedEmail,
+      password_hash: data.password_hash,
+      salt: data.salt,
+      email_verified: Boolean(data.email_verified),
+      verification_token: data.verification_token,
+      verification_sent_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+    if (existingIndex >= 0) {
+      creds[existingIndex] = newCred;
+    } else {
+      creds.push(newCred);
+    }
+    setStorage(STORAGE_KEYS.AUTH_CREDENTIALS, creds);
+    return newCred;
+  }
+
+  static updateAuthCredential(email: string, updates: Partial<LocalAuthCredential>): LocalAuthCredential | null {
+    const creds = this.getAuthCredentials();
+    const index = creds.findIndex(c => c.email.toLowerCase() === email.trim().toLowerCase());
+    if (index === -1) return null;
+    creds[index] = { ...creds[index], ...updates, updated_at: new Date().toISOString() };
+    setStorage(STORAGE_KEYS.AUTH_CREDENTIALS, creds);
+    return creds[index];
+  }
+
+  static verifyEmailByToken(token: string, email?: string): { success: boolean; email?: string; error?: string } {
+    if (!token) return { success: false, error: 'Verification token is required.' };
+    const creds = this.getAuthCredentials();
+    const index = creds.findIndex(c => {
+      const matchToken = c.verification_token === token;
+      const matchEmail = email ? c.email.toLowerCase() === email.trim().toLowerCase() : true;
+      return matchToken && matchEmail;
+    });
+
+    if (index === -1) {
+      return { success: false, error: 'Invalid, expired, or already used verification token.' };
+    }
+
+    creds[index].email_verified = true;
+    creds[index].verification_token = undefined;
+    creds[index].updated_at = new Date().toISOString();
+    setStorage(STORAGE_KEYS.AUTH_CREDENTIALS, creds);
+
+    // Update profile
+    const profiles = this.getProfiles();
+    const pIndex = profiles.findIndex(p => p.email.toLowerCase() === creds[index].email.toLowerCase());
+    if (pIndex !== -1) {
+      profiles[pIndex].email_verified = true;
+      profiles[pIndex].updated_at = new Date().toISOString();
+      setStorage(STORAGE_KEYS.PROFILES, profiles);
+    }
+
+    return { success: true, email: creds[index].email };
+  }
+
+  static setVerificationToken(email: string, token: string): boolean {
+    const creds = this.getAuthCredentials();
+    const index = creds.findIndex(c => c.email.toLowerCase() === email.trim().toLowerCase());
+    if (index === -1) return false;
+    creds[index].verification_token = token;
+    creds[index].verification_sent_at = new Date().toISOString();
+    creds[index].updated_at = new Date().toISOString();
+    setStorage(STORAGE_KEYS.AUTH_CREDENTIALS, creds);
+    return true;
+  }
+
   static createProfile(data: {
     auth_user_id: string;
     full_name: string;
@@ -170,10 +320,11 @@ export class LocalDbService {
     role: UserRole;
     organization_id: string;
     district?: string;
+    email_verified?: boolean;
   }): Profile {
     const profiles = this.getProfiles();
     const newProfile: Profile = {
-      id: `prof-${Date.now()}`,
+      id: data.auth_user_id || `prof-${Date.now()}`,
       auth_user_id: data.auth_user_id,
       full_name: data.full_name,
       email: data.email,
@@ -182,6 +333,7 @@ export class LocalDbService {
       organization_id: data.organization_id,
       district: data.district || 'Pune',
       avatar_url: `https://images.unsplash.com/photo-${1534528741775 + (profiles.length % 5)}?w=128&auto=format&fit=crop&q=80`,
+      email_verified: Boolean(data.email_verified),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -282,6 +434,15 @@ export class LocalDbService {
         ...cs,
         skill: skills.find(s => s.id === cs.skill_id)
       }));
+  }
+
+  static getAllCandidateSkills(): typeof SEED_CANDIDATE_SKILLS {
+    const candidateSkills = getStorage<typeof SEED_CANDIDATE_SKILLS>(STORAGE_KEYS.CANDIDATE_SKILLS, SEED_CANDIDATE_SKILLS);
+    const skills = this.getSkills();
+    return candidateSkills.map(cs => ({
+      ...cs,
+      skill: skills.find(s => s.id === cs.skill_id)
+    }));
   }
 
   static addCandidateSkill(candidateProfileId: string, skillId: string, level: 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert'): void {
@@ -444,6 +605,10 @@ export class LocalDbService {
 
   static applyToJob(candidateProfile: Profile, job: Job): Application {
     const apps = this.getApplications();
+    const existing = apps.find(a => a.candidate_id === candidateProfile.id && a.job_id === job.id);
+    if (existing) {
+      return existing;
+    }
     const newApp: Application = {
       id: `app-${Date.now()}`,
       candidate_id: candidateProfile.id,

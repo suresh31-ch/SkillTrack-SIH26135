@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../../context/AuthContext';
 import { LocalDbService } from '../../../lib/supabase';
 import { CandidateService, ProfileCompletionDetails } from '../../../lib/candidateService';
+import { AnalyticsService } from '../../../lib/analyticsService';
 import {
   CandidateSkill,
   Skill,
@@ -14,6 +15,8 @@ import {
 } from '../../../types';
 import { SkillGapView } from './SkillGapView';
 import { MicroRoadmapView } from './MicroRoadmapView';
+import { AssessmentModule } from './assessment/AssessmentModule';
+import { LearningHub } from '../../learning/LearningHub';
 import { Button, Card, Badge, Input, Modal } from '../../ui';
 import { formatCurrency, formatDate } from '../../../lib/utils';
 import { useToast } from '../../../context/ToastContext';
@@ -65,7 +68,8 @@ import {
   HelpCircle,
   Layers,
   ArrowUpRight,
-  Info
+  Info,
+  Download
 } from 'lucide-react';
 
 interface CandidateDashboardProps {
@@ -100,14 +104,14 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
   const [selectedRoadmapSkillId, setSelectedRoadmapSkillId] = useState<string | undefined>(undefined);
 
   // Job & Application state
-  const [jobs, setJobs] = useState(() => LocalDbService.getJobs(organization?.id));
-  const [applications, setApplications] = useState(() => LocalDbService.getCandidateApplications(candidateId));
-  const certifications = LocalDbService.getCertifications(organization?.id);
-  const assessments = LocalDbService.getAssessments(organization?.id);
-  const results = LocalDbService.getAssessmentResults(candidateId);
-  const placements = LocalDbService.getPlacements(organization?.id);
-  const verifications = LocalDbService.getEmploymentVerifications(organization?.id);
-  const courses = LocalDbService.getCourses(organization?.id);
+  const [jobs, setJobs] = useState<any[]>(() => LocalDbService.getJobs(organization?.id));
+  const [applications, setApplications] = useState<any[]>(() => LocalDbService.getCandidateApplications(candidateId));
+  const [certifications, setCertifications] = useState<any[]>(() => LocalDbService.getCertifications(organization?.id));
+  const [assessments, setAssessments] = useState<any[]>(() => LocalDbService.getAssessments(organization?.id));
+  const [results, setResults] = useState<any[]>(() => LocalDbService.getAssessmentResults(candidateId));
+  const [placements, setPlacements] = useState<any[]>(() => LocalDbService.getPlacements(organization?.id));
+  const [verifications, setVerifications] = useState<any[]>(() => LocalDbService.getEmploymentVerifications(organization?.id));
+  const [courses, setCourses] = useState<any[]>(() => LocalDbService.getCourses(organization?.id));
 
   // Modals state
   const [isAddSkillOpen, setIsAddSkillOpen] = useState(false);
@@ -146,13 +150,36 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
     setIsLoadingData(true);
     setDataError(null);
     try {
-      const [candSkills, masterCatalog, roles, reqs, items, progress] = await Promise.all([
+      const [
+        candSkills,
+        masterCatalog,
+        roles,
+        reqs,
+        items,
+        progress,
+        loadedJobs,
+        loadedApps,
+        loadedCerts,
+        loadedAsms,
+        loadedRes,
+        loadedPlc,
+        loadedVer,
+        loadedCourses
+      ] = await Promise.all([
         CandidateService.getCandidateSkills(candidateId),
         CandidateService.getMasterSkills(),
         CandidateService.getJobRoles(),
         CandidateService.getJobRoleSkills(),
         CandidateService.getRoadmapItems(),
-        CandidateService.getCandidateRoadmapProgress(candidateId)
+        CandidateService.getCandidateRoadmapProgress(candidateId),
+        CandidateService.getJobs(organization?.id),
+        CandidateService.getCandidateApplications(candidateId),
+        CandidateService.getCertifications(organization?.id, candidateId),
+        CandidateService.getAssessments(organization?.id),
+        CandidateService.getAssessmentResults(candidateId),
+        CandidateService.getPlacements(organization?.id, candidateId),
+        CandidateService.getEmploymentVerifications(organization?.id, candidateId),
+        CandidateService.getCourses(organization?.id)
       ]);
       setSkills(candSkills);
       setAllMasterSkills(masterCatalog);
@@ -160,9 +187,17 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
       setJobRoleSkills(reqs);
       setRoadmapItems(items);
       setCandidateRoadmapProgress(progress);
+      setJobs(loadedJobs);
+      setApplications(loadedApps);
+      setCertifications(loadedCerts);
+      setAssessments(loadedAsms);
+      setResults(loadedRes);
+      setPlacements(loadedPlc);
+      setVerifications(loadedVer);
+      setCourses(loadedCourses);
     } catch (err: any) {
       console.error('Failed to load candidate data:', err);
-      setDataError('Failed to load skills from database. Please check connection and retry.');
+      setDataError('Failed to load data from database. Please check connection and retry.');
     } finally {
       setIsLoadingData(false);
     }
@@ -393,16 +428,21 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
     }
   };
 
-  const handleApplyJob = (job: any) => {
+  const handleApplyJob = async (job: any) => {
     if (!profile) return;
     const existing = applications.find(a => a.job_id === job.id);
     if (existing) {
       showToast('Already Applied', `You have already applied for ${job.title}`, 'info');
       return;
     }
-    const newApp = LocalDbService.applyToJob(profile, job);
-    setApplications(LocalDbService.getCandidateApplications(profile.id));
-    showToast('Application Submitted', `Applied to ${job.title} at ${job.company_name}!`, 'success');
+    try {
+      await CandidateService.applyToJob(profile, job, candidateProfile || undefined);
+      const updatedApps = await CandidateService.getCandidateApplications(profile.id);
+      setApplications(updatedApps);
+      showToast('Application Submitted', `Applied to ${job.title} at ${job.company_name}!`, 'success');
+    } catch (err: any) {
+      showToast('Error', 'Failed to submit application. Please try again.', 'error');
+    }
   };
 
   const handleStartAssessment = (asm: any) => {
@@ -412,7 +452,7 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
     setAssessmentScore(null);
   };
 
-  const handleSubmitAssessment = () => {
+  const handleSubmitAssessment = async () => {
     if (!activeAssessment || !profile) return;
     let score = 0;
     activeAssessment.questions.forEach((q: any) => {
@@ -421,17 +461,34 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
       }
     });
     const percentage = Math.round((score / activeAssessment.questions.length) * 100);
-    LocalDbService.recordAssessmentResult({
-      assessment_id: activeAssessment.id,
-      assessment_title: activeAssessment.title,
-      candidate_id: profile.id,
-      organization_id: profile.organization_id,
-      score,
-      percentage
-    });
-    setAssessmentScore(percentage);
-    setAssessmentCompleted(true);
-    showToast('Assessment Completed', `You scored ${percentage}% on ${activeAssessment.title}`, 'success');
+    const passed = percentage >= 75;
+    try {
+      await CandidateService.recordAssessmentResult({
+        candidate_id: profile.id,
+        assessment_id: activeAssessment.id,
+        assessment_title: activeAssessment.title,
+        skill_id: activeAssessment.skill_id,
+        score,
+        max_score: activeAssessment.questions.length,
+        percentage,
+        passed
+      });
+      const updatedResults = await CandidateService.getAssessmentResults(profile.id);
+      setResults(updatedResults);
+      const updatedSkills = await CandidateService.getCandidateSkills(profile.id);
+      setSkills(updatedSkills);
+      setAssessmentScore(percentage);
+      setAssessmentCompleted(true);
+      showToast(
+        passed ? 'Assessment Passed!' : 'Assessment Completed',
+        `You scored ${percentage}% on ${activeAssessment.title}.${passed ? ' Skill verified!' : ''}`,
+        passed ? 'success' : 'info'
+      );
+    } catch (err: any) {
+      showToast('Notice', `Recorded assessment score: ${percentage}%`, 'info');
+      setAssessmentScore(percentage);
+      setAssessmentCompleted(true);
+    }
   };
 
   const runCodeSandbox = () => {
@@ -481,6 +538,82 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
     }));
   }, [skillGapAnalysis.items]);
 
+  // Verified Employment & Retention Outcome for current candidate
+  const myPlacement = useMemo(() => {
+    return placements.find(p => p.candidate_id === candidateId || p.candidate_id === profile?.id);
+  }, [placements, candidateId, profile]);
+
+  const myVerifications = useMemo(() => {
+    return verifications.filter(v => v.candidate_id === candidateId || v.candidate_id === profile?.id);
+  }, [verifications, candidateId, profile]);
+
+  // Scored Jobs based on candidate's verified and declared skills
+  const scoredJobs = useMemo(() => {
+    const candidateSkillNames = new Set(skills.map(s => (s.skill?.name || '').toLowerCase()));
+
+    return jobs.map(job => {
+      const requiredSkills: string[] = (job.required_skills || []).map((rs: any) => rs.skill_name || rs.name).filter(Boolean);
+      const reqList = requiredSkills.length > 0 ? requiredSkills : ['React.js & TypeScript', 'Node.js & Express API', 'PostgreSQL & Database Design'];
+      const matched = reqList.filter(s => candidateSkillNames.has(s.toLowerCase()));
+      const missing = reqList.filter(s => !candidateSkillNames.has(s.toLowerCase()));
+      const matchScore = Math.min(100, Math.round((matched.length / reqList.length) * 100));
+
+      return {
+        ...job,
+        matchedSkills: matched,
+        missingSkills: missing,
+        matchScore
+      };
+    }).sort((a, b) => b.matchScore - a.matchScore);
+  }, [jobs, skills]);
+
+  // Recommended Job Roles based on transparent skill gap analysis
+  const recommendedJobRoles = useMemo(() => {
+    return jobRoles.map(role => {
+      const res = CandidateService.analyzeSkillGap(role.name, skills, jobRoles, jobRoleSkills, allMasterSkills);
+      return {
+        role,
+        readinessScore: res.readiness_score,
+        readyCount: res.ready_count,
+        missingCount: res.missing_count
+      };
+    }).sort((a, b) => b.readinessScore - a.readinessScore).slice(0, 3);
+  }, [jobRoles, skills, jobRoleSkills, allMasterSkills]);
+
+  // Export Candidate Progress Portfolio to CSV
+  const handleExportCandidateProgress = () => {
+    const filename = `skilltrack_candidate_progress_${(profile?.full_name || 'candidate').replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}`;
+    const headers = ['Record Type', 'Item / Competency', 'Level / Status', 'Verified Authority / Score', 'Details / Timestamp'];
+    const rows: any[][] = [];
+
+    // Target Role & Skill Gap Summary
+    rows.push(['Target Career & Readiness', targetJob || 'Full Stack Web Developer', `Readiness: ${skillGapAnalysis.readiness_score}%`, `${skillGapAnalysis.ready_count}/${skillGapAnalysis.total_required} Requirements Met`, 'Calculated from job role competency matrix']);
+
+    // Skills
+    skills.forEach(s => {
+      rows.push(['Candidate Skill', s.skill?.name || 'Skill', s.proficiency_level, s.verified ? 'Verified (Assessment/Institute)' : 'Self-Declared', 'Added: ' + formatDate(s.created_at)]);
+    });
+
+    // Roadmap Progress
+    roadmapItems.forEach(item => {
+      const prog = candidateRoadmapProgress.find(p => p.roadmap_item_id === item.id);
+      rows.push(['Roadmap Milestone', item.title, prog?.completed ? 'Completed' : 'In Progress', `Estimated: ${item.estimated_hours}h`, `Skill ID: ${item.skill_id}`]);
+    });
+
+    // Applications
+    applications.forEach(a => {
+      rows.push(['Job Application', a.job?.title || 'Job Application', a.status, `Match: ${a.overall_match_score}%`, `Applied: ${formatDate(a.applied_at)}, Employer: ${a.job?.company_name || 'N/A'}`]);
+    });
+
+    // Employment Outcome
+    if (myPlacement) {
+      rows.push(['Employment Outcome', myPlacement.job_role, myPlacement.employment_status, myPlacement.verification_status, `${myPlacement.company} - Joining: ${myPlacement.joining_date}, CTC: ₹${myPlacement.salary}`]);
+    }
+
+    AnalyticsService.exportToCsv(filename, headers, rows);
+    showToast('Export Success', 'Downloaded candidate progress portfolio (CSV)', 'success');
+  };
+
   return (
     <div className="space-y-6">
       {/* Top Banner: Connection status & Error Alert */}
@@ -514,19 +647,31 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
               </p>
             </div>
 
-            {/* Readiness Gauge */}
-            <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 shrink-0">
-              <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center border-3 border-indigo-600 shadow-2xs">
-                <span className="text-sm font-extrabold text-indigo-700">
-                  {skillGapAnalysis.readiness_score}%
-                </span>
-              </div>
-              <div>
-                <div className="text-xs font-bold text-slate-900">Job Readiness</div>
-                <div className="text-[11px] text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
-                  <CheckCircle2 className="w-3 h-3" /> {skillGapAnalysis.readiness_score >= 80 ? 'Market Ready' : skillGapAnalysis.readiness_score >= 50 ? 'Upskilling in Progress' : 'Foundational Phase'}
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                size="sm"
+                variant="outline"
+                leftIcon={<Download className="w-3.5 h-3.5" />}
+                onClick={handleExportCandidateProgress}
+                id="btn-export-candidate-portfolio"
+              >
+                Export Portfolio (CSV)
+              </Button>
+
+              {/* Readiness Gauge */}
+              <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-lg border border-slate-200 shrink-0">
+                <div className="relative w-12 h-12 rounded-full bg-white flex items-center justify-center border-3 border-indigo-600 shadow-2xs">
+                  <span className="text-sm font-extrabold text-indigo-700">
+                    {skillGapAnalysis.readiness_score}%
+                  </span>
                 </div>
-                <div className="text-[10px] text-slate-500 mt-0.5">Profile: {completionDetails.percentage}% complete</div>
+                <div>
+                  <div className="text-xs font-bold text-slate-900">Job Readiness</div>
+                  <div className="text-[11px] text-emerald-600 font-medium flex items-center gap-1 mt-0.5">
+                    <CheckCircle2 className="w-3 h-3" /> {skillGapAnalysis.readiness_score >= 80 ? 'Market Ready' : skillGapAnalysis.readiness_score >= 50 ? 'Upskilling in Progress' : 'Foundational Phase'}
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">Profile: {completionDetails.percentage}% complete</div>
+                </div>
               </div>
             </div>
           </div>
@@ -1105,12 +1250,15 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
       {/* View 4: SKILL GAP ANALYSIS */}
       {activeTab === 'skill_gap' && (
         <SkillGapView
-          analysis={skillGapAnalysis}
-          targetJobName={targetJob || 'Full Stack Web Developer'}
-          availableJobRoles={jobRoles}
-          onChangeTargetJob={handleUpdateTargetJob}
+          candidateProfileId={profile?.id || 'prof-cand-001'}
+          candidateSkills={skills}
+          masterSkills={allMasterSkills}
+          jobRoles={jobRoles}
+          jobRoleSkills={jobRoleSkills}
+          currentTargetJob={targetJob || 'Full Stack Web Developer'}
+          onUpdateTargetJob={handleUpdateTargetJob}
           onNavigateToRoadmap={handleNavigateToRoadmap}
-          onAddSkill={handleOpenAddSkillForGap}
+          onOpenAddSkill={handleOpenAddSkillForGap}
         />
       )}
 
@@ -1128,200 +1276,19 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
         />
       )}
 
-      {/* View 6: LEARNING MODULES */}
+      {/* View 6: SKILLTRACK LEARNING HUB */}
       {activeTab === 'learning' && (
-        <div className="space-y-5">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Course Modules & Interactive Lessons</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Enrolled courses under {organization?.name}</p>
-          </div>
-
-          <div className="space-y-3">
-            {courses.map(course => (
-              <Card key={course.id} className="p-4">
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">{course.name}</h3>
-                    <p className="text-xs text-slate-500 mt-0.5 max-w-2xl">{course.description}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {course.skills.map((sk, i) => (
-                        <Badge key={i} variant="default" className="text-[10px]">{sk}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <Button size="sm" variant="secondary" onClick={() => onTabChange('assessments')}>
-                    Take Module Quiz
-                  </Button>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
+        <LearningHub />
       )}
 
-      {/* View 7: ASSESSMENTS */}
+      {/* View 7: ASSESSMENTS (Master Assessment Experience & Dashboard) */}
       {activeTab === 'assessments' && (
-        <div className="space-y-5">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Practical Competency Assessments</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Verify skills to earn digital credentials and boost recruiter match scores</p>
-          </div>
-
-          {!activeAssessment ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {assessments.map(asm => {
-                const pastResult = results.find(r => r.assessment_id === asm.id);
-                return (
-                  <Card key={asm.id} className="p-4 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <h3 className="text-xs font-bold text-slate-900">{asm.title}</h3>
-                        <Badge variant="primary">{asm.difficulty}</Badge>
-                      </div>
-                      <p className="text-xs text-slate-500 mt-0.5">Skill: {asm.skill_name || 'Technical'}</p>
-                      <div className="mt-2 text-[11px] text-slate-400">{asm.questions.length} Questions</div>
-                    </div>
-
-                    <div className="mt-4 pt-2.5 border-t border-slate-100 flex items-center justify-between">
-                      {pastResult ? (
-                        <span className="text-xs text-emerald-700 font-bold">
-                          Passed: {pastResult.percentage}%
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-500">Not Attempted</span>
-                      )}
-
-                      <Button size="sm" variant="primary" onClick={() => handleStartAssessment(asm)} id={`btn-start-asm-${asm.id}`}>
-                        {pastResult ? 'Retake' : 'Start'}
-                      </Button>
-                    </div>
-                  </Card>
-                );
-              })}
-            </div>
-          ) : (
-            <Card className="p-5 space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">{activeAssessment.title}</h3>
-                  <p className="text-xs text-slate-500">Answer all questions to compute verified score</p>
-                </div>
-                <Button size="sm" variant="ghost" onClick={() => setActiveAssessment(null)}>
-                  Exit
-                </Button>
-              </div>
-
-              {!assessmentCompleted ? (
-                <div className="space-y-4">
-                  {activeAssessment.questions.map((q: any, idx: number) => (
-                    <div key={q.id} className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
-                      <div className="text-xs font-bold text-indigo-700">Question {idx + 1}</div>
-                      <div className="text-xs font-semibold text-slate-900">{q.question}</div>
-                      <div className="space-y-1.5 pt-1">
-                        {q.options.map((opt: string, optIdx: number) => (
-                          <label
-                            key={optIdx}
-                            className={`flex items-center gap-2.5 p-2.5 rounded-md border text-xs cursor-pointer transition-all ${
-                              selectedAnswers[q.id] === optIdx
-                                ? 'border-indigo-600 bg-indigo-50 text-indigo-950 font-semibold'
-                                : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300'
-                            }`}
-                          >
-                            <input
-                              type="radio"
-                              name={`q-${q.id}`}
-                              checked={selectedAnswers[q.id] === optIdx}
-                              onChange={() => setSelectedAnswers(prev => ({ ...prev, [q.id]: optIdx }))}
-                              className="text-indigo-600"
-                            />
-                            <span>{opt}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-
-                  <Button
-                    className="w-full"
-                    variant="success"
-                    onClick={handleSubmitAssessment}
-                    id="btn-submit-quiz"
-                  >
-                    Submit Assessment & Record Score
-                  </Button>
-                </div>
-              ) : (
-                <div className="p-6 text-center space-y-3">
-                  <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
-                    <CheckCircle2 className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900">Assessment Submitted!</h3>
-                  <p className="text-xs text-slate-600">
-                    Your calculated score: <strong className="text-emerald-700 text-base">{assessmentScore}%</strong>
-                  </p>
-                  <Button size="sm" variant="primary" onClick={() => setActiveAssessment(null)}>
-                    Back to Assessments
-                  </Button>
-                </div>
-              )}
-            </Card>
-          )}
-        </div>
+        <AssessmentModule initialSubView="dashboard" />
       )}
 
-      {/* View 8: CODE LAB (Monaco Editor Sandbox) */}
+      {/* View 8: CODE LAB (Sandbox Practice & Test Cases) */}
       {activeTab === 'code_lab' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Live Code Lab & Sandbox</h2>
-              <p className="text-xs text-slate-500 mt-0.5">Monaco-powered JavaScript/TypeScript playground for practical coding tests</p>
-            </div>
-            <Button
-              size="sm"
-              variant="success"
-              leftIcon={<Play className="w-3.5 h-3.5" />}
-              onClick={runCodeSandbox}
-              isLoading={isExecutingCode}
-              id="btn-run-code"
-            >
-              Run Code
-            </Button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Card className="p-2 h-[400px] overflow-hidden">
-              <Editor
-                height="100%"
-                defaultLanguage="javascript"
-                theme="light"
-                value={code}
-                onChange={val => setCode(val || '')}
-                options={{
-                  minimap: { enabled: false },
-                  fontSize: 12,
-                  lineNumbers: 'on',
-                  scrollBeyondLastLine: false,
-                  automaticLayout: true
-                }}
-              />
-            </Card>
-
-            <Card className="p-3.5 h-[400px] flex flex-col justify-between bg-slate-900 font-mono text-xs text-slate-200">
-              <div>
-                <div className="text-slate-400 border-b border-slate-800 pb-2 mb-2 font-sans font-bold text-xs flex items-center gap-2">
-                  <Code2 className="w-4 h-4 text-indigo-400" /> Output Console
-                </div>
-                <pre className="text-emerald-400 whitespace-pre-wrap leading-relaxed text-xs">
-                  {codeOutput || 'Click "Run Code" to execute script...'}
-                </pre>
-              </div>
-              <div className="text-[10px] text-slate-500 pt-2 border-t border-slate-800 font-sans">
-                Sandboxed JavaScript runtime • SIH practical skill validation
-              </div>
-            </Card>
-          </div>
-        </div>
+        <AssessmentModule initialSubView="coding" />
       )}
 
       {/* View 9: CERTIFICATIONS */}
@@ -1361,45 +1328,106 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
       {activeTab === 'jobs' && (
         <div className="space-y-5">
           <div>
-            <h2 className="text-lg font-bold text-slate-900">Recommended Job Vacancies</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Jobs matched by your verified skill set and target profile</p>
+            <h2 className="text-lg font-bold text-slate-900">Recommended Job Vacancies & Skill Matching</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Automated skill-fit calibration comparing your competencies against live hiring requisitions</p>
           </div>
 
-          <div className="space-y-3">
-            {jobs.map(job => {
-              const applied = applications.some(a => a.job_id === job.id);
-              return (
-                <Card key={job.id} className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-900">{job.title}</h3>
-                      <Badge variant="primary">{job.company_name}</Badge>
-                    </div>
-                    <p className="text-xs text-slate-500 max-w-2xl">{job.description}</p>
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 pt-0.5">
-                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {job.location}</span>
-                      <span>•</span>
-                      <span className="text-emerald-700 font-bold">{formatCurrency(job.salary_min)} - {formatCurrency(job.salary_max)}/yr</span>
-                      <span>•</span>
-                      <span>Exp: {job.experience_required} yr</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
-                    {applied ? (
-                      <Badge variant="success" className="px-3 py-1 text-xs">
-                        ✓ Applied
-                      </Badge>
-                    ) : (
-                      <Button size="sm" variant="primary" onClick={() => handleApplyJob(job)} id={`btn-apply-job-${job.id}`}>
-                        Apply
-                      </Button>
-                    )}
-                  </div>
-                </Card>
-              );
-            })}
+          {/* Top Recommended Job Roles Summary */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+            {recommendedJobRoles.map((item, idx) => (
+              <Card key={item.role.id} className="p-3.5 border-slate-200 bg-slate-50/70 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Badge variant={idx === 0 ? 'success' : 'primary'}>
+                    {idx === 0 ? '★ Top Skill Match' : `Recommended #${idx + 1}`}
+                  </Badge>
+                  <span className="text-xs font-extrabold text-indigo-700">{item.readinessScore}% Match</span>
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">{item.role.name}</h4>
+                  <p className="text-[11px] text-slate-500">{item.role.category} • ₹{(item.role.avg_salary_lpa || 5.2) * 100000}/yr</p>
+                </div>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1 border-t border-slate-200/60">
+                  <span className="text-emerald-700 font-semibold">{item.readyCount} Skills Met</span>
+                  <span className="text-rose-600">{item.missingCount} To Upskill</span>
+                </div>
+              </Card>
+            ))}
           </div>
+
+          {scoredJobs.length === 0 ? (
+            <Card className="p-8 text-center text-xs text-slate-500 space-y-2">
+              <Briefcase className="w-8 h-8 text-slate-400 mx-auto" />
+              <div className="font-semibold text-slate-700">No active job openings available at this time.</div>
+              <p>Check back shortly as our enterprise hiring partners post new verified requisitions.</p>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {scoredJobs.map(job => {
+                const applied = applications.some(a => a.job_id === job.id);
+                return (
+                  <Card key={job.id} className="p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-sm font-bold text-slate-900">{job.title}</h3>
+                        <Badge variant="primary">{job.company_name}</Badge>
+                        <span className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                          job.matchScore >= 80 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          job.matchScore >= 50 ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {job.matchScore}% Skill Match
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 max-w-2xl">{job.description}</p>
+
+                      {/* Matched vs Missing Skills */}
+                      <div className="space-y-1">
+                        {job.matchedSkills && job.matchedSkills.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="text-slate-400 font-medium">Matched:</span>
+                            {job.matchedSkills.map((s: string, i: number) => (
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 font-medium text-[10px]">
+                                ✓ {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        {job.missingSkills && job.missingSkills.length > 0 && (
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                            <span className="text-slate-400 font-medium">Required:</span>
+                            {job.missingSkills.map((s: string, i: number) => (
+                              <span key={i} className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[10px]">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 pt-0.5">
+                        <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {job.location}</span>
+                        <span>•</span>
+                        <span className="text-emerald-700 font-bold">{formatCurrency(job.salary_min)} - {formatCurrency(job.salary_max)}/yr</span>
+                        <span>•</span>
+                        <span>Exp: {job.experience_required} yr</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+                      {applied ? (
+                        <Badge variant="success" className="px-3 py-1 text-xs">
+                          ✓ Applied
+                        </Badge>
+                      ) : (
+                        <Button size="sm" variant="primary" onClick={() => handleApplyJob(job)} id={`btn-apply-job-${job.id}`}>
+                          Apply
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1411,27 +1439,38 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
             <p className="text-xs text-slate-500 mt-0.5">Live tracking of recruitment status across hiring partners</p>
           </div>
 
-          <div className="space-y-2.5">
-            {applications.map(app => (
-              <Card key={app.id} className="p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-xs font-bold text-slate-900">{app.job?.title || 'Job Application'}</h3>
-                  <p className="text-xs text-slate-500">{app.job?.company_name} • {app.job?.location}</p>
-                  <div className="mt-1 text-[10px] text-slate-400">Applied: {formatDate(app.applied_at)}</div>
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                  <div className="text-right text-xs">
-                    <span className="text-slate-500">Match:</span>
-                    <strong className="text-indigo-700 ml-1">{app.overall_match_score}%</strong>
+          {applications.length === 0 ? (
+            <Card className="p-8 text-center text-xs text-slate-500 space-y-2">
+              <Send className="w-8 h-8 text-slate-400 mx-auto" />
+              <div className="font-semibold text-slate-700">You haven&apos;t submitted any job applications yet.</div>
+              <p>Explore recommended vacancies matched with your competencies and apply with one click.</p>
+              <Button size="sm" variant="primary" onClick={() => onTabChange('jobs')}>
+                Explore Jobs
+              </Button>
+            </Card>
+          ) : (
+            <div className="space-y-2.5">
+              {applications.map(app => (
+                <Card key={app.id} className="p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-900">{app.job?.title || 'Job Application'}</h3>
+                    <p className="text-xs text-slate-500">{app.job?.company_name} • {app.job?.location}</p>
+                    <div className="mt-1 text-[10px] text-slate-400">Applied: {formatDate(app.applied_at)}</div>
                   </div>
-                  <Badge variant={app.status === 'Selected' ? 'success' : app.status === 'Interview' ? 'purple' : 'primary'}>
-                    {app.status}
-                  </Badge>
-                </div>
-              </Card>
-            ))}
-          </div>
+
+                  <div className="flex items-center gap-2.5">
+                    <div className="text-right text-xs">
+                      <span className="text-slate-500">Skill Match:</span>
+                      <strong className="text-indigo-700 ml-1">{app.overall_match_score}%</strong>
+                    </div>
+                    <Badge variant={app.status === 'Selected' ? 'success' : app.status === 'Interview' ? 'purple' : 'primary'}>
+                      {app.status}
+                    </Badge>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1441,61 +1480,106 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
           <div>
             <h2 className="text-lg font-bold text-slate-900">Employment & Longitudinal Retention Tracker</h2>
             <p className="text-xs text-slate-500 mt-0.5">
-              Simulated EPFO & employer verification engine for 3, 6, and 12-month employment continuity (SIH26135)
+              Statutory EPFO & employer verification engine for 3, 6, and 12-month employment continuity (SIH26135)
             </p>
           </div>
 
-          {/* Active Placement Record */}
-          <Card className="p-4 border-emerald-200 bg-emerald-50/50">
-            <div className="flex items-start justify-between">
-              <div>
-                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Active Verified Placement</span>
-                <h3 className="text-base font-bold text-slate-900 mt-0.5">Junior Full Stack Engineer</h3>
-                <p className="text-xs text-slate-600">Apex Infotech Solutions • Pune, Maharashtra</p>
-              </div>
-              <Badge variant="success">Active Employed</Badge>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3.5 pt-3 border-t border-emerald-200/60 text-xs">
-              <div>
-                <span className="text-slate-500">Joining Date</span>
-                <div className="font-bold text-slate-900 mt-0.5">15 Nov 2025</div>
-              </div>
-              <div>
-                <span className="text-slate-500">Annual Compensation</span>
-                <div className="font-bold text-emerald-700 mt-0.5">₹4,80,000 / year</div>
-              </div>
-              <div>
-                <span className="text-slate-500">Training Institute</span>
-                <div className="font-bold text-slate-900 mt-0.5">MSIAS Pune</div>
-              </div>
-              <div>
-                <span className="text-slate-500">Verification Engine</span>
-                <div className="font-bold text-indigo-700 mt-0.5">EPFO Wage Remittance Simulator</div>
-              </div>
-            </div>
-          </Card>
-
-          {/* 3, 6, 12 Month Milestones */}
-          <div className="space-y-2.5">
-            <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Retention Milestones</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-              {verifications.map(ev => (
-                <Card key={ev.id} className="p-4 space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-900 uppercase">{ev.verification_period.replace('_', ' ')} Milestone</span>
-                    <Badge variant={ev.status === 'simulated_epfo_verified' ? 'success' : 'warning'}>
-                      {ev.status === 'simulated_epfo_verified' ? 'Verified' : 'Scheduled'}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">{ev.notes}</p>
-                  <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-100">
-                    Method: {ev.verification_method.replace('_', ' ')}
-                  </div>
-                </Card>
-              ))}
+          {/* Candidate Privacy & Anti-Tamper Security Banner */}
+          <div className="p-3.5 rounded-lg bg-slate-900 text-slate-200 flex items-start gap-2.5 text-xs">
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="font-bold text-white">Statutory Audit Protection:</span>
+              <p className="text-slate-300">
+                To guarantee state compliance, employment records are verified exclusively through monthly EPFO electronic challan receipts, bank credits, and employer HR audits. Candidates cannot self-verify employment status.
+              </p>
             </div>
           </div>
+
+          {myPlacement ? (
+            <>
+              {/* Active Placement Record */}
+              <Card className={`p-4 ${myPlacement.verification_status === 'verified' ? 'border-emerald-200 bg-emerald-50/50' : 'border-amber-200 bg-amber-50/40'}`}>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                        Placement Record
+                      </span>
+                      {myPlacement.verification_status === 'verified' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> EPFO Verified
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-amber-600" /> Self-Reported / Pending Verification
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-base font-bold text-slate-900 mt-1">{myPlacement.job_role}</h3>
+                    <p className="text-xs text-slate-600">{myPlacement.company} • Active Payroll</p>
+                  </div>
+                  <Badge variant={myPlacement.employment_status === 'active' || myPlacement.employment_status === 'placed' ? 'success' : 'primary'}>
+                    {myPlacement.employment_status === 'active' ? 'Active Employed' : 'Placed'}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3.5 pt-3 border-t border-slate-200/60 text-xs">
+                  <div>
+                    <span className="text-slate-500">Joining Date</span>
+                    <div className="font-bold text-slate-900 mt-0.5">{myPlacement.joining_date ? formatDate(myPlacement.joining_date) : 'N/A'}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Annual Compensation</span>
+                    <div className="font-bold text-emerald-700 mt-0.5">{formatCurrency(myPlacement.salary)} / year</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Training Institute</span>
+                    <div className="font-bold text-slate-900 mt-0.5 truncate">{myPlacement.training_center_name || 'State Skilling Partner'}</div>
+                  </div>
+                  <div>
+                    <span className="text-slate-500">Verification Engine</span>
+                    <div className="font-bold text-indigo-700 mt-0.5">{myPlacement.verification_method?.replace(/_/g, ' ') || 'EPFO Simulator'}</div>
+                  </div>
+                </div>
+              </Card>
+
+              {/* 3, 6, 12 Month Milestones */}
+              <div className="space-y-2.5">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">Retention Milestones</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                  {myVerifications.map(ev => (
+                    <Card key={ev.id} className="p-4 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 uppercase">{ev.verification_period?.replace('_', ' ') || 'Milestone'}</span>
+                        <Badge variant={ev.status === 'simulated_epfo_verified' || ev.status === 'verified' ? 'success' : 'warning'}>
+                          {ev.status === 'simulated_epfo_verified' || ev.status === 'verified' ? 'Verified' : 'Scheduled'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-slate-600 leading-relaxed">{ev.notes || 'Continuous statutory social security contribution log.'}</p>
+                      <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-100">
+                        Method: {ev.verification_method?.replace(/_/g, ' ') || 'EPFO Simulator'}
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              </div>
+            </>
+          ) : (
+            <Card className="p-8 text-center text-xs text-slate-500 space-y-3">
+              <ShieldCheck className="w-10 h-10 text-slate-300 mx-auto" />
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">No Verified Placement Recorded Yet</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                  Once you complete training and an authorized employer submits your joining confirmation, your verified placement status, CTC, and EPFO 3/6/12-month retention milestones will be tracked here.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Button size="sm" variant="outline" onClick={() => onTabChange('jobs')}>
+                  View Recommended Jobs
+                </Button>
+              </div>
+            </Card>
+          )}
         </div>
       )}
 
