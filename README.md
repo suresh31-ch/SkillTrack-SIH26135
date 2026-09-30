@@ -18,3 +18,4 @@ View your app in AI Studio: https://ai.studio/apps/8d64121e-1900-49b4-a817-7d91e
 2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
 3. Run the app:
    `npm run dev`
+   SkillTrack SIH26135   
