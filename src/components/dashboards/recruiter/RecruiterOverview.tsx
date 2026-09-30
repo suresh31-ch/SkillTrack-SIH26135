@@ -1,7 +1,7 @@
 import React from 'react';
 import { Job, Application, ApplicationStatus } from '../../../types';
 import { RecruiterStats } from '../../../lib/recruiterService';
-import { Card, Badge, Button } from '../../ui';
+import { Card, Badge, Button, UserAvatar } from '../../ui';
 import {
   Briefcase,
   Users,
@@ -439,11 +439,11 @@ export const RecruiterOverview: React.FC<RecruiterOverviewProps> = ({
                 className="py-3.5 first:pt-0 last:pb-0 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 p-2 rounded-xl transition-colors"
               >
                 <div className="flex items-center gap-3 min-w-0">
-                  <img
-                    src={app.candidate?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80'}
-                    alt={app.candidate?.full_name || 'Candidate'}
-                    className="w-10 h-10 rounded-xl object-cover ring-2 ring-indigo-500/20 flex-shrink-0"
-                    referrerPolicy="no-referrer"
+                  <UserAvatar
+                    avatarUrl={app.candidate?.avatar_url}
+                    name={app.candidate?.full_name}
+                    size="md"
+                    className="w-10 h-10 rounded-xl ring-2 ring-indigo-500/20 shrink-0"
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">

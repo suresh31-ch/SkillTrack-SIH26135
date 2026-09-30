@@ -11,16 +11,24 @@ import {
 } from '../types/learning';
 import { SKILLTRACK_COURSES } from './learningData';
 
-const PROGRESS_STORAGE_KEY = 'skilltrack_learning_progress_v2';
-const ENROLLMENT_STORAGE_KEY = 'skilltrack_enrolled_courses_v2';
+const PROGRESS_STORAGE_KEY_PREFIX = 'skilltrack_learning_progress_';
+const ENROLLMENT_STORAGE_KEY_PREFIX = 'skilltrack_enrolled_courses_';
 
 export class LearningService {
+  private static getProgressKey(candidateId?: string): string {
+    return `${PROGRESS_STORAGE_KEY_PREFIX}${candidateId || 'default'}`;
+  }
+
+  private static getEnrollmentKey(candidateId?: string): string {
+    return `${ENROLLMENT_STORAGE_KEY_PREFIX}${candidateId || 'default'}`;
+  }
+
   // 1. Get all courses with candidate enrollment status and current progress attached
-  static getCourses(): LearningCourse[] {
-    const enrollments = this.getEnrollments();
+  static getCourses(candidateId?: string): LearningCourse[] {
+    const enrollments = this.getEnrollments(candidateId);
     return SKILLTRACK_COURSES.map(course => {
-      const isEnrolled = enrollments[course.id] !== undefined ? enrollments[course.id] : course.enrolled;
-      const progress = this.getCourseProgress(course.id);
+      const isEnrolled = enrollments[course.id] !== undefined ? enrollments[course.id] : false;
+      const progress = this.getCourseProgress(course.id, candidateId);
       
       let status = course.status;
       if (progress) {
@@ -42,8 +50,8 @@ export class LearningService {
   }
 
   // 2. Get specific course by id
-  static getCourseById(courseId: string): LearningCourse | undefined {
-    const courses = this.getCourses();
+  static getCourseById(courseId: string, candidateId?: string): LearningCourse | undefined {
+    const courses = this.getCourses(candidateId);
     return courses.find(c => c.id === courseId);
   }
 
@@ -53,39 +61,47 @@ export class LearningService {
   }
 
   // 4. Get enrollments map
-  static getEnrollments(): Record<string, boolean> {
+  static getEnrollments(candidateId?: string): Record<string, boolean> {
     try {
-      const stored = localStorage.getItem(ENROLLMENT_STORAGE_KEY);
+      const key = this.getEnrollmentKey(candidateId);
+      const stored = localStorage.getItem(key);
       if (stored) {
         return JSON.parse(stored);
       }
     } catch (e) {
       console.error('Error reading enrollments from storage:', e);
     }
-    // Default initial enrollments
-    return {
-      'crs-py-001': true,
-      'crs-dsa-002': true,
-      'crs-sql-003': true,
-      'crs-fullstack-005': true
-    };
+
+    // Only provide seeded enrollments for the demo persona
+    if (candidateId === 'prof-cand-001') {
+      return {
+        'crs-py-001': true,
+        'crs-dsa-002': true,
+        'crs-sql-003': true,
+        'crs-fullstack-005': true
+      };
+    }
+
+    return {};
   }
 
   // 5. Toggle or set enrollment
-  static setEnrollment(courseId: string, enrolled: boolean): void {
-    const enrollments = this.getEnrollments();
+  static setEnrollment(courseId: string, enrolled: boolean, candidateId?: string): void {
+    const enrollments = this.getEnrollments(candidateId);
     enrollments[courseId] = enrolled;
     try {
-      localStorage.setItem(ENROLLMENT_STORAGE_KEY, JSON.stringify(enrollments));
+      const key = this.getEnrollmentKey(candidateId);
+      localStorage.setItem(key, JSON.stringify(enrollments));
     } catch (e) {
       console.error('Error saving enrollment:', e);
     }
   }
 
   // 6. Get all course progress records
-  static getAllProgress(): Record<string, LearnerCourseProgress> {
+  static getAllProgress(candidateId?: string): Record<string, LearnerCourseProgress> {
     try {
-      const stored = localStorage.getItem(PROGRESS_STORAGE_KEY);
+      const key = this.getProgressKey(candidateId);
+      const stored = localStorage.getItem(key);
       if (stored) {
         return JSON.parse(stored);
       }
@@ -93,84 +109,51 @@ export class LearningService {
       console.error('Error reading progress from storage:', e);
     }
 
-    // Default seeded progress for realistic demo experience
-    const initialProgress: Record<string, LearnerCourseProgress> = {
-      'crs-py-001': {
-        courseId: 'crs-py-001',
-        candidateId: 'prof-cand-001',
-        startedAt: '2026-08-15T10:00:00Z',
-        lastAccessedAt: '2026-08-29T18:30:00Z',
-        lastItemId: 'item-py-01-03',
-        completedItemIds: ['item-py-01-01', 'item-py-01-02'],
-        knowledgeCheckResults: {},
-        challengeSubmissions: {
-          'ch-py-01': {
-            solved: true,
-            code: 'def aggregate_sensors(readings, min_threshold):\n    result = {}\n    for sensor_id, temp in readings:\n        if temp >= min_threshold:\n            if sensor_id not in result or temp > result[sensor_id]:\n                result[sensor_id] = temp\n    return result\n',
-            language: 'Python',
-            solvedAt: '2026-08-29T18:15:00Z',
-            passedTests: 4,
-            totalTests: 4,
-            attempts: 1
-          }
-        },
-        certificateIssued: false
-      },
-      'crs-dsa-002': {
-        courseId: 'crs-dsa-002',
-        candidateId: 'prof-cand-001',
-        startedAt: '2026-08-20T14:00:00Z',
-        lastAccessedAt: '2026-08-30T01:15:00Z',
-        lastItemId: 'item-dsa-01-02',
-        completedItemIds: ['item-dsa-01-01'],
-        knowledgeCheckResults: {},
-        challengeSubmissions: {},
-        certificateIssued: false
-      },
-      'crs-sql-003': {
-        courseId: 'crs-sql-003',
-        candidateId: 'prof-cand-001',
-        startedAt: '2026-08-22T08:00:00Z',
-        lastAccessedAt: '2026-08-28T14:00:00Z',
-        lastItemId: 'item-sql-01-01',
-        completedItemIds: ['item-sql-01-01'],
-        knowledgeCheckResults: {},
-        challengeSubmissions: {},
-        certificateIssued: false
-      },
-      'crs-fullstack-005': {
-        courseId: 'crs-fullstack-005',
-        candidateId: 'prof-cand-001',
-        startedAt: '2026-08-25T12:00:00Z',
-        lastAccessedAt: '2026-08-30T02:00:00Z',
-        lastItemId: 'item-fs-01-01',
-        completedItemIds: ['item-fs-01-01'],
-        knowledgeCheckResults: {},
-        challengeSubmissions: {},
-        certificateIssued: false
-      }
-    };
-
-    try {
-      localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(initialProgress));
-    } catch (e) {
-      console.error('Failed to set initial progress:', e);
+    // Default seeded progress only for demo candidate persona
+    if (candidateId === 'prof-cand-001') {
+      const demoProgress: Record<string, LearnerCourseProgress> = {
+        'crs-py-001': {
+          courseId: 'crs-py-001',
+          candidateId: 'prof-cand-001',
+          startedAt: '2026-08-15T10:00:00Z',
+          lastAccessedAt: '2026-08-29T18:30:00Z',
+          lastItemId: 'item-py-01-03',
+          completedItemIds: ['item-py-01-01', 'item-py-01-02'],
+          knowledgeCheckResults: {},
+          challengeSubmissions: {
+            'ch-py-01': {
+              solved: true,
+              code: 'def aggregate_sensors(readings, min_threshold):\n    result = {}\n    for sensor_id, temp in readings:\n        if temp >= min_threshold:\n            if sensor_id not in result or temp > result[sensor_id]:\n                result[sensor_id] = temp\n    return result\n',
+              language: 'Python',
+              solvedAt: '2026-08-29T18:15:00Z',
+              passedTests: 4,
+              totalTests: 4,
+              attempts: 1
+            }
+          },
+          certificateIssued: false
+        }
+      };
+      try {
+        localStorage.setItem(this.getProgressKey(candidateId), JSON.stringify(demoProgress));
+      } catch {}
+      return demoProgress;
     }
 
-    return initialProgress;
+    return {};
   }
 
   // 7. Get progress for single course
-  static getCourseProgress(courseId: string): LearnerCourseProgress | undefined {
-    const all = this.getAllProgress();
+  static getCourseProgress(courseId: string, candidateId?: string): LearnerCourseProgress | undefined {
+    const all = this.getAllProgress(candidateId);
     return all[courseId];
   }
 
   // 8. Calculate course completion percentage
-  static getCourseCompletionPercentage(courseId: string): number {
-    const course = this.getCourseById(courseId);
+  static getCourseCompletionPercentage(courseId: string, candidateId?: string): number {
+    const course = this.getCourseById(courseId, candidateId);
     if (!course) return 0;
-    const progress = this.getCourseProgress(courseId);
+    const progress = this.getCourseProgress(courseId, candidateId);
     if (!progress) return 0;
     const total = this.getTotalItemCount(course);
     if (total === 0) return 0;
@@ -178,14 +161,14 @@ export class LearningService {
   }
 
   // 9. Mark an item (lesson, challenge, knowledge check) as completed
-  static markItemCompleted(courseId: string, itemId: string): LearnerCourseProgress {
-    const all = this.getAllProgress();
+  static markItemCompleted(courseId: string, itemId: string, candidateId?: string): LearnerCourseProgress {
+    const all = this.getAllProgress(candidateId);
     let courseProg = all[courseId];
 
     if (!courseProg) {
       courseProg = {
         courseId,
-        candidateId: 'prof-cand-001',
+        candidateId: candidateId || '',
         startedAt: new Date().toISOString(),
         lastAccessedAt: new Date().toISOString(),
         lastItemId: itemId,
@@ -203,10 +186,10 @@ export class LearningService {
     courseProg.lastAccessedAt = new Date().toISOString();
 
     // Auto-check certificate eligibility
-    const course = this.getCourseById(courseId);
+    const course = this.getCourseById(courseId, candidateId);
     if (course) {
       const total = this.getTotalItemCount(course);
-      if (courseProg.completedItemIds.length >= total && !courseProg.certificateIssued) {
+      if (courseProg.completedItemIds.length >= total && !courseProg.certificateIssued && total > 0) {
         courseProg.certificateIssued = true;
         courseProg.certificateNumber = `ST-MSIAS-2026-${Math.floor(100000 + Math.random() * 900000)}`;
         courseProg.certificateIssuedAt = new Date().toISOString();
@@ -215,7 +198,7 @@ export class LearningService {
 
     all[courseId] = courseProg;
     try {
-      localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(all));
+      localStorage.setItem(this.getProgressKey(candidateId), JSON.stringify(all));
     } catch (e) {
       console.error('Error updating progress:', e);
     }
@@ -223,14 +206,14 @@ export class LearningService {
   }
 
   // 10. Update last accessed item for "Resume Learning"
-  static updateLastAccessedItem(courseId: string, itemId: string): void {
-    const all = this.getAllProgress();
+  static updateLastAccessedItem(courseId: string, itemId: string, candidateId?: string): void {
+    const all = this.getAllProgress(candidateId);
     let courseProg = all[courseId];
 
     if (!courseProg) {
       courseProg = {
         courseId,
-        candidateId: 'prof-cand-001',
+        candidateId: candidateId || '',
         startedAt: new Date().toISOString(),
         lastAccessedAt: new Date().toISOString(),
         lastItemId: itemId,
@@ -246,9 +229,9 @@ export class LearningService {
 
     all[courseId] = courseProg;
     try {
-      localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(all));
+      localStorage.setItem(this.getProgressKey(candidateId), JSON.stringify(all));
     } catch (e) {
-      console.error('Error updating last accessed item:', e);
+      console.error('Error saving last accessed item:', e);
     }
   }
 
@@ -259,7 +242,8 @@ export class LearningService {
     kcId: string,
     userAnswers: Record<number, number>,
     questions: Array<{ id: number; correctIndex: number; topic: string; question: string }>,
-    timeSpentSeconds: number
+    timeSpentSeconds: number,
+    candidateId?: string
   ): KnowledgeCheckResult {
     let correctCount = 0;
     let incorrectCount = 0;
@@ -313,10 +297,10 @@ export class LearningService {
     };
 
     // Save result to progress
-    const all = this.getAllProgress();
+    const all = this.getAllProgress(candidateId);
     let courseProg = all[courseId] || {
       courseId,
-      candidateId: 'prof-cand-001',
+      candidateId: candidateId || 'default',
       startedAt: new Date().toISOString(),
       lastAccessedAt: new Date().toISOString(),
       lastItemId: itemId,
@@ -335,7 +319,7 @@ export class LearningService {
 
     all[courseId] = courseProg;
     try {
-      localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(all));
+      localStorage.setItem(this.getProgressKey(candidateId), JSON.stringify(all));
     } catch (e) {
       console.error('Error saving knowledge check result:', e);
     }
@@ -344,8 +328,8 @@ export class LearningService {
   }
 
   // 12. Save challenge draft
-  static saveChallengeDraft(courseId: string, challengeId: string, language: SupportedLanguage, code: string): void {
-    const all = this.getAllProgress();
+  static saveChallengeDraft(courseId: string, challengeId: string, language: SupportedLanguage, code: string, candidateId?: string): void {
+    const all = this.getAllProgress(candidateId);
     let courseProg = all[courseId];
     if (!courseProg) return;
 
@@ -359,7 +343,7 @@ export class LearningService {
 
     all[courseId] = courseProg;
     try {
-      localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(all));
+      localStorage.setItem(this.getProgressKey(candidateId), JSON.stringify(all));
     } catch (e) {
       console.error('Error saving draft code:', e);
     }
@@ -445,12 +429,13 @@ export class LearningService {
     challengeId: string,
     code: string,
     language: SupportedLanguage,
-    evalResult: ChallengeExecutionResult
+    evalResult: ChallengeExecutionResult,
+    candidateId?: string
   ): LearnerCourseProgress {
-    const all = this.getAllProgress();
+    const all = this.getAllProgress(candidateId);
     let courseProg = all[courseId] || {
       courseId,
-      candidateId: 'prof-cand-001',
+      candidateId: candidateId || 'default',
       startedAt: new Date().toISOString(),
       lastAccessedAt: new Date().toISOString(),
       lastItemId: itemId,
@@ -480,7 +465,7 @@ export class LearningService {
     courseProg.lastAccessedAt = new Date().toISOString();
 
     // Check certificate eligibility
-    const course = this.getCourseById(courseId);
+    const course = this.getCourseById(courseId, candidateId);
     if (course) {
       const total = this.getTotalItemCount(course);
       if (courseProg.completedItemIds.length >= total && !courseProg.certificateIssued) {
@@ -492,7 +477,7 @@ export class LearningService {
 
     all[courseId] = courseProg;
     try {
-      localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(all));
+      localStorage.setItem(this.getProgressKey(candidateId), JSON.stringify(all));
     } catch (e) {
       console.error('Error submitting challenge:', e);
     }
@@ -501,16 +486,18 @@ export class LearningService {
   }
 
   // 15. Generate / calculate Personal Learning Performance stats
-  static getPersonalStats(): PersonalLearningStats {
-    const all = this.getAllProgress();
+  static getPersonalStats(candidateId?: string): PersonalLearningStats {
+    const all = this.getAllProgress(candidateId);
     const progressList = Object.values(all);
 
     let challengesAttempted = 0;
     let challengesCompleted = 0;
     let totalScoreSum = 0;
     let totalScoreCount = 0;
+    let completedItemsCount = 0;
 
     progressList.forEach(p => {
+      completedItemsCount += p.completedItemIds?.length || 0;
       const subs = Object.values(p.challengeSubmissions || {});
       subs.forEach(s => {
         challengesAttempted += s.attempts || 1;
@@ -524,37 +511,42 @@ export class LearningService {
       });
     });
 
-    const courses = this.getCourses();
+    const courses = this.getCourses(candidateId);
     const enrolledCourses = courses.filter(c => c.enrolled);
-    const completedCourses = enrolledCourses.filter(c => this.getCourseCompletionPercentage(c.id) === 100);
+    const completedCourses = enrolledCourses.filter(c => this.getCourseCompletionPercentage(c.id, candidateId) === 100);
 
-    const assessmentAvg = totalScoreCount > 0 ? Math.round(totalScoreSum / totalScoreCount) : 84;
-    const accuracy = challengesAttempted > 0 ? Math.round((challengesCompleted / challengesAttempted) * 100) : 92;
+    const assessmentAvg = totalScoreCount > 0 ? Math.round(totalScoreSum / totalScoreCount) : 0;
+    const accuracy = challengesAttempted > 0 ? Math.round((challengesCompleted / challengesAttempted) * 100) : 0;
+    const totalHours = Math.round(completedItemsCount * 0.5);
+
+    // Calculate actual active streak
+    let streakDays = 0;
+    if (progressList.length > 0 && completedItemsCount > 0) {
+      const hasRecentAccess = progressList.some(p => {
+        if (!p.lastAccessedAt) return false;
+        const diffMs = Date.now() - new Date(p.lastAccessedAt).getTime();
+        return diffMs < 48 * 3600 * 1000;
+      });
+      if (hasRecentAccess) streakDays = 1;
+    }
 
     return {
-      challengesAttempted: Math.max(challengesAttempted, 6),
-      challengesCompleted: Math.max(challengesCompleted, 5),
-      successfulTestRuns: Math.max(challengesCompleted * 3, 18),
-      totalTestRuns: Math.max(challengesAttempted * 3, 22),
-      learningStreakDays: 14,
+      challengesAttempted,
+      challengesCompleted,
+      successfulTestRuns: challengesCompleted * 3,
+      totalTestRuns: challengesAttempted * 3,
+      learningStreakDays: streakDays,
       overallAccuracy: accuracy,
       assessmentAverage: assessmentAvg,
       coursesEnrolled: enrolledCourses.length,
       coursesCompleted: completedCourses.length,
-      totalLearningHours: 38,
-      skillPerformance: [
-        { skill: 'Python', score: 88, verified: true },
-        { skill: 'Algorithms', score: 76, verified: true },
-        { skill: 'SQL & DBs', score: 82, verified: true },
-        { skill: 'React & TS', score: 90, verified: true },
-        { skill: 'Java Backend', score: 70, verified: false },
-        { skill: 'Applied AI', score: 85, verified: true }
-      ],
-      difficultyPerformance: [
-        { difficulty: 'Easy', completed: 6, total: 6, accuracy: 100 },
-        { difficulty: 'Medium', completed: 4, total: 5, accuracy: 80 },
-        { difficulty: 'Hard', completed: 2, total: 3, accuracy: 66 }
-      ]
+      totalLearningHours: totalHours,
+      skillPerformance: progressList.length > 0 ? [
+        { skill: 'Python & Data', score: assessmentAvg, verified: challengesCompleted > 0 }
+      ] : [],
+      difficultyPerformance: challengesAttempted > 0 ? [
+        { difficulty: 'Easy', completed: challengesCompleted, total: challengesAttempted, accuracy }
+      ] : []
     };
   }
 }

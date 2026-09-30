@@ -9,6 +9,7 @@ import {
 import { LearningService } from '../../lib/learningService';
 import { Card, Button, Badge, Modal } from '../ui';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import confetti from 'canvas-confetti';
 import {
   Code2,
@@ -51,6 +52,8 @@ export const CodingChallengeLab: React.FC<CodingChallengeLabProps> = ({
   allCourseItems
 }) => {
   const { showToast } = useToast();
+  const { user, profile, isDemoMode } = useAuth();
+  const effectiveCandidateId = isDemoMode ? 'prof-cand-001' : (user?.id || profile?.id || 'default');
   const challenge: LearningChallenge | undefined = item.challengeData;
 
   const [language, setLanguage] = useState<SupportedLanguage>('Python');
@@ -67,7 +70,7 @@ export const CodingChallengeLab: React.FC<CodingChallengeLabProps> = ({
   useEffect(() => {
     if (!challenge) return;
 
-    const progress = LearningService.getCourseProgress(course.id);
+    const progress = LearningService.getCourseProgress(course.id, effectiveCandidateId);
     const savedSub = progress?.challengeSubmissions[challenge.id];
     const draft = progress?.customDraftCodes?.[challenge.id]?.[language];
 
@@ -112,13 +115,13 @@ export const CodingChallengeLab: React.FC<CodingChallengeLabProps> = ({
 
   const handleLanguageChange = (newLang: SupportedLanguage) => {
     setLanguage(newLang);
-    const progress = LearningService.getCourseProgress(course.id);
+    const progress = LearningService.getCourseProgress(course.id, effectiveCandidateId);
     const draft = progress?.customDraftCodes?.[challenge.id]?.[newLang];
     setCode(draft || challenge.starterCode[newLang] || '');
   };
 
   const handleSaveDraft = () => {
-    LearningService.saveChallengeDraft(course.id, challenge.id, language, code);
+    LearningService.saveChallengeDraft(course.id, challenge.id, language, code, effectiveCandidateId);
     showToast('Challenge draft code saved successfully', 'info');
   };
 
@@ -161,7 +164,8 @@ export const CodingChallengeLab: React.FC<CodingChallengeLabProps> = ({
         challenge.id,
         code,
         language,
-        result
+        result,
+        effectiveCandidateId
       );
 
       if (result.passed) {

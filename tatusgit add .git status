@@ -1,0 +1,95 @@
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/candidate/CandidateDashboard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/candidate/SkillGapView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/candidate/assessment/AssessmentModule.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/candidate/assessment/AssessmentProgressDashboard.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/candidate/assessment/AssessmentQuizView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/recruiter/ApplicantManagementView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/recruiter/CandidateProfileModal.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/recruiter/CandidateSearchView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/recruiter/PipelineKanbanView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/dashboards/recruiter/RecruiterOverview.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/Header.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/layout/Sidebar.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/learning/CertificationCenterView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/learning/CodingChallengeLab.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/learning/CourseWorkspace.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/learning/KnowledgeCheckView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/learning/LearningHub.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/learning/LearningPerformanceView.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/components/ui/index.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/context/AuthContext.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/assessmentData.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/assessmentService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/candidateService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/learningService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/skillIntelligenceEngine.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/supabase.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/lib/trainingService.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'src/types/index.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'tests/skillIntelligence.test.ts', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/README.md b/README.md[m
+[1mindex 1f49f26..0a296b3 100644[m
+[1m--- a/README.md[m
+[1m+++ b/README.md[m
+[36m@@ -1,8 +1,12 @@[m
+[32m+[m[32m<div align="center">[m
+[32m+[m[32m<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />[m
+[32m+[m[32m</div>[m
+[32m+[m
+ # Run and deploy your AI Studio app[m
+ [m
+ This contains everything you need to run your app locally.[m
+ [m
+[31m-View your app in AI Studio: https://skilltrack.ai.studio/[m
+[32m+[m[32mView your app in AI Studio: https://ai.studio/apps/8d64121e-1900-49b4-a817-7d91e1ba9fb8[m
+ [m
+ ## Run Locally[m
+ [m
+[1mdiff --git a/src/components/dashboards/candidate/CandidateDashboard.tsx b/src/components/dashboards/candidate/CandidateDashboard.tsx[m
+[1mindex ff85fa5..b5db93c 100644[m
+[1m--- a/src/components/dashboards/candidate/CandidateDashboard.tsx[m
+[1m+++ b/src/components/dashboards/candidate/CandidateDashboard.tsx[m
+[36m@@ -17,7 +17,15 @@[m [mimport { SkillGapView } from './SkillGapView';[m
+ import { MicroRoadmapView } from './MicroRoadmapView';[m
+ import { AssessmentModule } from './assessment/AssessmentModule';[m
+ import { LearningHub } from '../../learning/LearningHub';[m
+[31m-import { Button, Card, Badge, Input, Modal } from '../../ui';[m
+[32m+[m[32mimport { CareerGoalsView } from './views/CareerGoalsView';[m
+[32m+[m[32mimport { CompanyRoleExplorerView } from './views/CompanyRoleExplorerView';[m
+[32m+[m[32mimport { CareerPortfolioView } from './views/CareerPortfolioView';[m
+[32m+[m[32mimport { CompanySkillGapView } from './views/CompanySkillGapView';[m
+[32m+[m[32mimport { PreApplicationReviewModal } from './views/PreApplicationReviewModal';[m
+[32m+[m[32mimport { StudentOnboardingModal } from './views/StudentOnboardingModal';[m
+[32m+[m[32mimport { CompanyRoleProfile } from '../../../types/studentJourney';[m
+[32m+[m[32mimport { StudentJourneyService } from '../../../lib/studentJourneyService';[m
+[32m+[m[32mimport { Button, Card, Badge, Input, Modal, UserAvatar, EmptyState } from '../../ui';[m
+ import { formatCurrency, formatDate } from '../../../lib/utils';[m
+ import { useToast } from '../../../context/ToastContext';[m
+ import Editor from '@monaco-editor/react';[m
+[36m@@ -78,10 +86,10 @@[m [minterface CandidateDashboardProps {[m
+ }[m
+ [m
+ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTab, onTabChange }) => {[m
+[31m-  const { profile, candidateProfile, organization, refreshProfile, isSupabaseLive } = useAuth();[m
+[32m+[m[32m  const { profile, candidateProfile, organization, refreshProfile, isSupabaseLive, isDemoMode } = useAuth();[m
+   const { showToast } = useToast();[m
+ [m
+[31m-  const candidateId = profile?.id || 'prof-cand-001';[m
+[32m+[m[32m  const candidateId = profile?.id || candidateProfile?.id || (isDemoMode ? 'prof-cand-001' : '');[m
+ [m
+   // Loading & Error States[m
+   const [isLoadingData, setIsLoadingData] = useState(true);[m
+[36m@@ -99,18 +107,18 @@[m [mexport const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa[m
+   const [jobRoleSkills, setJobRoleSkills] = useState<JobRoleSkill[]>(() => LocalDbService.getJobRoleSkills());[m
+   const [roadmapItems, setRoadmapItems] = useState<RoadmapItem[]>(() => LocalDbService.getRoadmapItems());[m
+   const [candidateRoadmapProgress, setCandidateRoadmapProgress] = useState<CandidateRoadmapProgress[]>(() =>[m
+[31m-    LocalDbService.getCandidateRoadmapProgress(candidateId)[m
+[32m+[m[32m    candidateId ? LocalDbService.getCandidateRoadmapProgress(candidateId) : [][m
+   );[m
+   const [selectedRoadmapSkillId, setSelectedRoadmapSkillId] = useState<string | undefined>(undefined);[m
+ [m
+   // Job & Application state[m
+   const [jobs, setJobs] = useState<any[]>(() => LocalDbService.getJobs(organization?.id));[m
+[31m-  const [applications, setApplications] = useState<any[]>(() => LocalDbService.getCandidateApplications(candidateId));[m
+[31m-  const [certifications, setCertifications] = useState<any[]>(() => Loc

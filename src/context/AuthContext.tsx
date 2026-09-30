@@ -135,6 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // 4. Resolve Candidate Profile if role is candidate
       if (resolvedProfile.role === 'candidate') {
         let resolvedCp: CandidateProfile | null = null;
+        // 1. First check Supabase candidate_profiles if online
         if (isSupabaseLive && supabase) {
           try {
             const { data: cpData } = await supabase
@@ -150,22 +151,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         }
 
+        // 2. Check local database for persistent candidate profile
         if (!resolvedCp) {
-          resolvedCp = {
-            id: `cand-${authUserId}`,
-            profile_id: authUserId,
+          resolvedCp = LocalDbService.getCandidateProfile(authUserId) || null;
+        }
+
+        // 3. If no existing record exists, provision a clean un-fabricated profile for this user
+        if (!resolvedCp) {
+          const candidateSkills = LocalDbService.getCandidateSkills(authUserId);
+          resolvedCp = LocalDbService.upsertCandidateProfile(authUserId, {
             organization_id: orgId,
-            education: 'Bachelor of Technology (B.Tech)',
-            degree: 'Computer Science & Engineering',
-            graduation_year: 2025,
-            experience_years: 0,
-            target_job: 'Full Stack Web Developer',
-            readiness_score: 75,
-            profile_completion: 80,
-            employment_status: 'in_training',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          };
+            education: userMetadata?.education || 'Bachelor of Technology (B.Tech)',
+            degree: userMetadata?.degree || 'Computer Science & Engineering',
+            graduation_year: userMetadata?.graduation_year || 2025,
+            experience_years: userMetadata?.experience_years || 0,
+            target_job: userMetadata?.target_job || 'Full Stack Web Developer',
+            career_goal: userMetadata?.career_goal || 'Software Engineer',
+            readiness_score: candidateSkills.length > 0 ? 30 : 0, // 0 until skills assessed
+            employment_status: userMetadata?.employment_status || 'in_training'
+          });
         }
         setCandidateProfile(resolvedCp);
       } else {

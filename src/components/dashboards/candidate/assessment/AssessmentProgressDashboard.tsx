@@ -9,7 +9,8 @@ import {
   SupportedSkill,
   AssessmentDifficulty
 } from '../../../../lib/assessmentData';
-import { Card, Button, Badge, Input } from '../../../ui';
+import { Card, Button, Badge, Input, EmptyState } from '../../../ui';
+import { useAuth } from '../../../../context/AuthContext';
 import {
   Award,
   CheckCircle2,
@@ -45,24 +46,29 @@ import {
 } from 'recharts';
 
 interface AssessmentProgressDashboardProps {
+  candidateProfileId?: string;
   onStartAssessment: (skill?: SupportedSkill, difficulty?: AssessmentDifficulty) => void;
   onGoToCodingPractice: (skill?: string) => void;
   onReviewPastAssessment?: (record: HistoricalAssessmentRecord) => void;
 }
 
 export const AssessmentProgressDashboard: React.FC<AssessmentProgressDashboardProps> = ({
+  candidateProfileId,
   onStartAssessment,
   onGoToCodingPractice,
   onReviewPastAssessment
 }) => {
+  const { profile, candidateProfile, isDemoMode } = useAuth();
+  const effectiveCandidateId = candidateProfileId || candidateProfile?.id || profile?.id || (isDemoMode ? 'prof-cand-001' : '');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [skillFilter, setSkillFilter] = useState<'All' | SupportedSkill>('All');
   const [difficultyFilter, setDifficultyFilter] = useState<'All' | AssessmentDifficulty>('All');
 
-  const metrics: AssessmentMetrics = AssessmentService.getMetrics();
-  const skillProgressList: SkillProgressData[] = AssessmentService.getSkillWiseProgress();
-  const allHistory: HistoricalAssessmentRecord[] = AssessmentService.getAssessmentHistory();
-  const solvedProblems = AssessmentService.getSolvedProblems();
+  const metrics: AssessmentMetrics = AssessmentService.getMetrics(effectiveCandidateId);
+  const skillProgressList: SkillProgressData[] = AssessmentService.getSkillWiseProgress(effectiveCandidateId);
+  const allHistory: HistoricalAssessmentRecord[] = AssessmentService.getAssessmentHistory(effectiveCandidateId);
+  const solvedProblems = AssessmentService.getSolvedProblems(effectiveCandidateId);
 
   // Filter history records
   const filteredHistory = allHistory.filter(item => {
@@ -309,8 +315,18 @@ export const AssessmentProgressDashboard: React.FC<AssessmentProgressDashboardPr
         </div>
 
         {/* Table Content */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+        {allHistory.length === 0 ? (
+          <EmptyState
+            icon={<Award className="w-6 h-6 text-indigo-500" />}
+            title="No assessments completed yet"
+            description="Take your first assessment in Python, React, SQL, or other in-demand skills to build verified competency evidence and unlock targeted career recommendations."
+            actionText="Start First Assessment"
+            onAction={() => onStartAssessment()}
+            className="my-3 py-10"
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-slate-200 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">
                 <th className="py-2.5 px-3">Skill & Assessment</th>
@@ -395,6 +411,7 @@ export const AssessmentProgressDashboard: React.FC<AssessmentProgressDashboardPr
             </tbody>
           </table>
         </div>
+        )}
       </Card>
     </div>
   );

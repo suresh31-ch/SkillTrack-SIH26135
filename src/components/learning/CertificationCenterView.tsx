@@ -4,6 +4,7 @@ import { LearningService } from '../../lib/learningService';
 import { Card, Button, Badge } from '../ui';
 import { CertificateModal } from './CertificateModal';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import confetti from 'canvas-confetti';
 import {
   Award,
@@ -26,21 +27,23 @@ export const CertificationCenterView: React.FC<CertificationCenterViewProps> = (
   onSelectCourse
 }) => {
   const { showToast } = useToast();
-  const courses = LearningService.getCourses();
+  const { user, profile, isDemoMode } = useAuth();
+  const effectiveCandidateId = isDemoMode ? 'prof-cand-001' : (user?.id || profile?.id || 'default');
+  const courses = LearningService.getCourses(effectiveCandidateId);
   const [selectedCertCourse, setSelectedCertCourse] = useState<LearningCourse | null>(null);
 
   const completedCourses = courses.filter(
-    c => LearningService.getCourseCompletionPercentage(c.id) === 100
+    c => LearningService.getCourseCompletionPercentage(c.id, effectiveCandidateId) === 100
   );
   const inProgressCourses = courses.filter(
-    c => LearningService.getCourseCompletionPercentage(c.id) < 100 && c.enrolled
+    c => LearningService.getCourseCompletionPercentage(c.id, effectiveCandidateId) < 100 && c.enrolled
   );
 
   // Quick helper to simulate 100% completion for any course so user/evaluator can test certificates!
   const handleQuickUnlockCertificate = (course: LearningCourse) => {
     course.modules.forEach(m => {
       m.items.forEach(i => {
-        LearningService.markItemCompleted(course.id, i.id);
+        LearningService.markItemCompleted(course.id, i.id, effectiveCandidateId);
       });
     });
 
@@ -97,7 +100,7 @@ export const CertificationCenterView: React.FC<CertificationCenterViewProps> = (
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {completedCourses.map(course => {
-              const progress = LearningService.getCourseProgress(course.id);
+              const progress = LearningService.getCourseProgress(course.id, effectiveCandidateId);
               return (
                 <Card key={course.id} className="p-5 border-slate-200 bg-white flex flex-col justify-between space-y-4 shadow-xs">
                   <div className="flex items-start justify-between gap-3">
@@ -146,8 +149,8 @@ export const CertificationCenterView: React.FC<CertificationCenterViewProps> = (
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {inProgressCourses.map(course => {
-            const progress = LearningService.getCourseProgress(course.id);
-            const percentage = LearningService.getCourseCompletionPercentage(course.id);
+            const progress = LearningService.getCourseProgress(course.id, effectiveCandidateId);
+            const percentage = LearningService.getCourseCompletionPercentage(course.id, effectiveCandidateId);
             const totalItems = LearningService.getTotalItemCount(course);
             const completedCount = progress?.completedItemIds.length || 0;
 
@@ -213,7 +216,7 @@ export const CertificationCenterView: React.FC<CertificationCenterViewProps> = (
           isOpen={Boolean(selectedCertCourse)}
           onClose={() => setSelectedCertCourse(null)}
           course={selectedCertCourse}
-          progress={LearningService.getCourseProgress(selectedCertCourse.id)}
+          progress={LearningService.getCourseProgress(selectedCertCourse.id, effectiveCandidateId)}
         />
       )}
     </div>

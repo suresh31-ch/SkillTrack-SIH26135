@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { RecruiterCandidateDetail, Job, Skill } from '../../../types';
-import { Card, Badge, Button, Input } from '../../ui';
+import { Card, Badge, Button, Input, UserAvatar } from '../../ui';
 import {
   Search,
   Filter,
@@ -304,11 +304,11 @@ export const CandidateSearchView: React.FC<CandidateSearchViewProps> = ({
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="relative">
-                        <img
-                          src={cand.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80'}
-                          alt={cand.full_name}
-                          className="w-14 h-14 rounded-2xl object-cover ring-2 ring-indigo-500/20 shadow-sm"
-                          referrerPolicy="no-referrer"
+                        <UserAvatar
+                          avatarUrl={cand.avatar_url}
+                          name={cand.full_name}
+                          size="xl"
+                          className="w-14 h-14 rounded-2xl ring-2 ring-indigo-500/20 shadow-sm"
                         />
                         <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 ring-2 ring-white dark:ring-slate-900" title="State Skilling Certified">
                           <CheckCircle2 className="w-3 h-3" />
@@ -437,11 +437,11 @@ export const CandidateSearchView: React.FC<CandidateSearchViewProps> = ({
 
             <div>
               <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 mb-3">
-                <img
-                  src={shortlistingCandidate.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80'}
-                  alt={shortlistingCandidate.full_name}
-                  className="w-10 h-10 rounded-xl object-cover"
-                  referrerPolicy="no-referrer"
+                <UserAvatar
+                  avatarUrl={shortlistingCandidate.avatar_url}
+                  name={shortlistingCandidate.full_name}
+                  size="md"
+                  className="w-10 h-10 rounded-xl"
                 />
                 <div>
                   <h4 className="text-xs font-bold text-slate-900 dark:text-slate-100">

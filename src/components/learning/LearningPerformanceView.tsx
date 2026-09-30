@@ -1,7 +1,8 @@
 import React from 'react';
 import { LearningService } from '../../lib/learningService';
 import { LearningCourse } from '../../types/learning';
-import { Card, Button, Badge } from '../ui';
+import { Card, Button, Badge, EmptyState } from '../ui';
+import { useAuth } from '../../context/AuthContext';
 import {
   TrendingUp,
   Award,
@@ -15,7 +16,8 @@ import {
   BarChart3,
   Calendar,
   Flame,
-  ArrowUpRight
+  ArrowUpRight,
+  GraduationCap
 } from 'lucide-react';
 
 interface LearningPerformanceViewProps {
@@ -25,9 +27,27 @@ interface LearningPerformanceViewProps {
 export const LearningPerformanceView: React.FC<LearningPerformanceViewProps> = ({
   onSelectCourse
 }) => {
-  const stats = LearningService.getPersonalStats();
-  const courses = LearningService.getCourses();
+  const { profile, candidateProfile, isDemoMode } = useAuth();
+  const effectiveCandidateId = candidateProfile?.id || profile?.id || (isDemoMode ? 'prof-cand-001' : '');
+
+  const stats = LearningService.getPersonalStats(effectiveCandidateId);
+  const courses = LearningService.getCourses(effectiveCandidateId);
   const enrolledCourses = courses.filter(c => c.enrolled);
+
+  if (enrolledCourses.length === 0) {
+    return (
+      <div className="space-y-6 max-w-5xl mx-auto">
+        <EmptyState
+          icon={<GraduationCap className="w-8 h-8 text-indigo-500" />}
+          title="No learning activity yet"
+          description="Complete coding challenges and lesson modules in the Learning Hub to view real-time performance telemetry, milestone progress, and skill pass rates."
+          actionText="Explore Curriculum"
+          onAction={() => onSelectCourse(courses[0])}
+          className="my-8 py-16 bg-white"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">

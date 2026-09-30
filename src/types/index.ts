@@ -55,6 +55,7 @@ export interface CandidateProfile {
   experience_years: number;
   employment_status: 'unemployed' | 'in_training' | 'placed' | 'verified_employed' | 'seeking_upgrade';
   target_job: string;
+  career_goal?: string;
   readiness_score: number; // 0-100
   profile_completion: number; // 0-100
   created_at: string;
@@ -191,6 +192,7 @@ export interface Job {
   status: 'open' | 'closed' | 'paused' | 'draft';
   required_skills?: JobRequiredSkill[];
   skills_required?: string[];
+  skills?: string[];
   created_at: string;
   updated_at: string;
 }
@@ -438,11 +440,16 @@ export interface AssessmentResult {
   assessment_id: string;
   assessment_title?: string;
   candidate_id: string;
+  candidate_name?: string;
   organization_id?: string;
+  skill_id?: string;
+  skill_name?: string;
   score: number;
   max_score?: number;
-  percentage: number;
+  percentage?: number;
   passed?: boolean;
+  certificate_issued?: boolean;
+  time_spent_minutes?: number;
   completed_at: string;
 }
 

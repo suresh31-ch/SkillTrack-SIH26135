@@ -10,6 +10,7 @@ import { CodingChallengeLab } from './CodingChallengeLab';
 import { LearningPerformanceView } from './LearningPerformanceView';
 import { CertificateModal } from './CertificateModal';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   ArrowLeft,
   BookOpen,
@@ -38,7 +39,9 @@ export const CourseWorkspace: React.FC<CourseWorkspaceProps> = ({
   onBackToHub
 }) => {
   const { showToast } = useToast();
-  const [course, setCourse] = useState<LearningCourse | undefined>(() => LearningService.getCourseById(courseId));
+  const { user, profile, isDemoMode } = useAuth();
+  const effectiveCandidateId = isDemoMode ? 'prof-cand-001' : (user?.id || profile?.id || 'default');
+  const [course, setCourse] = useState<LearningCourse | undefined>(() => LearningService.getCourseById(courseId, effectiveCandidateId));
   const [activeTab, setActiveTab] = useState<'overview' | 'curriculum' | 'workspace' | 'performance' | 'certificate'>('workspace');
   const [activeItemId, setActiveItemId] = useState<string>('');
   const [showCertificateModal, setShowCertificateModal] = useState<boolean>(false);
@@ -50,11 +53,11 @@ export const CourseWorkspace: React.FC<CourseWorkspaceProps> = ({
     : [];
 
   useEffect(() => {
-    const updated = LearningService.getCourseById(courseId);
+    const updated = LearningService.getCourseById(courseId, effectiveCandidateId);
     setCourse(updated);
 
     if (updated) {
-      const progress = LearningService.getCourseProgress(courseId);
+      const progress = LearningService.getCourseProgress(courseId, effectiveCandidateId);
       if (initialItemId && initialItemId === 'certificate') {
         setActiveTab('certificate');
       } else if (initialItemId && allItems.some(i => i.id === initialItemId)) {
@@ -68,7 +71,7 @@ export const CourseWorkspace: React.FC<CourseWorkspaceProps> = ({
         setActiveTab('workspace');
       }
     }
-  }, [courseId, initialItemId, refreshTrigger]);
+  }, [courseId, initialItemId, refreshTrigger, effectiveCandidateId]);
 
   if (!course) {
     return (
@@ -81,8 +84,8 @@ export const CourseWorkspace: React.FC<CourseWorkspaceProps> = ({
     );
   }
 
-  const progress = LearningService.getCourseProgress(course.id);
-  const completionPercentage = LearningService.getCourseCompletionPercentage(course.id);
+  const progress = LearningService.getCourseProgress(course.id, effectiveCandidateId);
+  const completionPercentage = LearningService.getCourseCompletionPercentage(course.id, effectiveCandidateId);
   const totalItems = LearningService.getTotalItemCount(course);
   const completedCount = progress?.completedItemIds.length || 0;
 
@@ -93,7 +96,7 @@ export const CourseWorkspace: React.FC<CourseWorkspaceProps> = ({
   const handleSelectItem = (itemId: string) => {
     setActiveItemId(itemId);
     setActiveTab('workspace');
-    LearningService.updateLastAccessedItem(course.id, itemId);
+    LearningService.updateLastAccessedItem(course.id, itemId, effectiveCandidateId);
   };
 
   const handleItemCompleted = (itemId: string) => {

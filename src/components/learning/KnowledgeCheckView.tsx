@@ -3,6 +3,7 @@ import { ModuleItem, LearningCourse, KnowledgeCheckData, KnowledgeCheckResult } 
 import { LearningService } from '../../lib/learningService';
 import { Card, Button, Badge, Modal } from '../ui';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   HelpCircle,
   Clock,
@@ -39,9 +40,11 @@ export const KnowledgeCheckView: React.FC<KnowledgeCheckViewProps> = ({
   allCourseItems
 }) => {
   const { showToast } = useToast();
+  const { user, profile, isDemoMode } = useAuth();
+  const effectiveCandidateId = isDemoMode ? 'prof-cand-001' : (user?.id || profile?.id || 'default');
   const kcData: KnowledgeCheckData | undefined = item.knowledgeCheckData;
 
-  const progress = LearningService.getCourseProgress(course.id);
+  const progress = LearningService.getCourseProgress(course.id, effectiveCandidateId);
   const existingResult = kcData ? progress?.knowledgeCheckResults[kcData.id] : undefined;
 
   const [currentQIndex, setCurrentQIndex] = useState<number>(0);
@@ -137,7 +140,8 @@ export const KnowledgeCheckView: React.FC<KnowledgeCheckViewProps> = ({
       kcData.id,
       selectedAnswers,
       questions,
-      timeSpent
+      timeSpent,
+      effectiveCandidateId
     );
 
     setResult(computedResult);

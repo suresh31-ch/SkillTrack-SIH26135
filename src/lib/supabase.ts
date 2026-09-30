@@ -4,6 +4,7 @@ import {
   Profile,
   LocalAuthCredential,
   CandidateProfile,
+  CandidateSkill,
   Skill,
   JobRole,
   JobRoleSkill,
@@ -320,19 +321,20 @@ export class LocalDbService {
     role: UserRole;
     organization_id: string;
     district?: string;
+    avatar_url?: string;
     email_verified?: boolean;
   }): Profile {
     const profiles = this.getProfiles();
     const newProfile: Profile = {
       id: data.auth_user_id || `prof-${Date.now()}`,
       auth_user_id: data.auth_user_id,
-      full_name: data.full_name,
-      email: data.email,
-      phone: data.phone,
+      full_name: data.full_name?.trim() || '',
+      email: data.email?.trim().toLowerCase() || '',
+      phone: data.phone?.trim() || '',
       role: data.role,
       organization_id: data.organization_id,
-      district: data.district || 'Pune',
-      avatar_url: `https://images.unsplash.com/photo-${1534528741775 + (profiles.length % 5)}?w=128&auto=format&fit=crop&q=80`,
+      district: data.district?.trim() || '',
+      avatar_url: data.avatar_url?.trim() || '',
       email_verified: Boolean(data.email_verified),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -340,24 +342,26 @@ export class LocalDbService {
     profiles.push(newProfile);
     setStorage(STORAGE_KEYS.PROFILES, profiles);
 
-    // If candidate, create candidate profile entry
+    // If candidate, create clean candidate profile entry with 0 fabricated fields
     if (data.role === 'candidate') {
       const cProfiles = getStorage<CandidateProfile[]>(STORAGE_KEYS.CANDIDATE_PROFILES, SEED_CANDIDATE_PROFILES);
       const newCProfile: CandidateProfile = {
         id: `cand-prof-${Date.now()}`,
         profile_id: newProfile.id,
         organization_id: data.organization_id,
-        education: 'Bachelor of Technology (B.Tech)',
-        degree: 'Engineering / Science',
-        graduation_year: 2025,
+        education: '',
+        degree: '',
+        graduation_year: (undefined as unknown) as number,
         experience_years: 0,
-        employment_status: 'in_training',
-        target_job: 'Software / Automation Engineer',
-        readiness_score: 70,
-        profile_completion: 80,
+        employment_status: 'unemployed',
+        target_job: '',
+        career_goal: '',
+        readiness_score: 0,
+        profile_completion: 0,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
+      newCProfile.profile_completion = this.calculateProfileCompletion(newProfile.id);
       cProfiles.push(newCProfile);
       setStorage(STORAGE_KEYS.CANDIDATE_PROFILES, cProfiles);
     }
@@ -421,6 +425,45 @@ export class LocalDbService {
     return cProfiles[index];
   }
 
+  static upsertCandidateProfile(profileId: string, data: Partial<CandidateProfile>): CandidateProfile {
+    const cProfiles = getStorage<CandidateProfile[]>(STORAGE_KEYS.CANDIDATE_PROFILES, SEED_CANDIDATE_PROFILES);
+    const index = cProfiles.findIndex(cp => cp.profile_id === profileId);
+    
+    if (index !== -1) {
+      cProfiles[index] = {
+        ...cProfiles[index],
+        ...data,
+        updated_at: new Date().toISOString()
+      };
+      cProfiles[index].profile_completion = this.calculateProfileCompletion(profileId);
+      setStorage(STORAGE_KEYS.CANDIDATE_PROFILES, cProfiles);
+      return cProfiles[index];
+    }
+
+    const newCandidateProfile: CandidateProfile = {
+      id: `cand-${profileId}`,
+      profile_id: profileId,
+      organization_id: data.organization_id || '00000000-0000-0000-0000-000000000001',
+      education: data.education || '',
+      degree: data.degree || '',
+      graduation_year: data.graduation_year || (undefined as unknown as number),
+      experience_years: data.experience_years || 0,
+      target_job: data.target_job || '',
+      career_goal: data.career_goal || '',
+      readiness_score: data.readiness_score || 0,
+      profile_completion: 0,
+      employment_status: data.employment_status || 'unemployed',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      ...data
+    };
+
+    newCandidateProfile.profile_completion = this.calculateProfileCompletion(profileId);
+    cProfiles.push(newCandidateProfile);
+    setStorage(STORAGE_KEYS.CANDIDATE_PROFILES, cProfiles);
+    return newCandidateProfile;
+  }
+
   static getSkills(): typeof SEED_SKILLS {
     return getStorage<typeof SEED_SKILLS>(STORAGE_KEYS.SKILLS, SEED_SKILLS);
   }
@@ -470,6 +513,60 @@ export class LocalDbService {
       cProfiles[idx].profile_completion = completion;
       setStorage(STORAGE_KEYS.CANDIDATE_PROFILES, cProfiles);
     }
+  }
+
+  static upsertCandidateSkillWithEvidence(
+    candidateProfileId: string,
+    skillId: string,
+    level: 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert',
+    verified: boolean,
+    verificationSource?: string
+  ): CandidateSkill {
+    const list = getStorage<typeof SEED_CANDIDATE_SKILLS>(STORAGE_KEYS.CANDIDATE_SKILLS, SEED_CANDIDATE_SKILLS);
+    const existing = list.find(s => s.candidate_id === candidateProfileId && s.skill_id === skillId);
+    let resultItem: CandidateSkill;
+
+    const rankMap: Record<string, number> = {
+      'Beginner': 1,
+      'Intermediate': 2,
+      'Advanced': 3,
+      'Expert': 4
+    };
+
+    if (existing) {
+      const currentRank = rankMap[existing.proficiency_level] || 1;
+      const newRank = rankMap[level] || 1;
+      if (newRank >= currentRank) {
+        existing.proficiency_level = level;
+      }
+      if (verified) {
+        existing.verified = true;
+        existing.verification_source = verificationSource || existing.verification_source || 'Verified Assessment';
+      }
+      resultItem = existing as CandidateSkill;
+    } else {
+      const newItem: any = {
+        id: `cs-${Date.now()}`,
+        candidate_id: candidateProfileId,
+        skill_id: skillId,
+        proficiency_level: level,
+        verified: Boolean(verified),
+        verification_source: verificationSource,
+        created_at: new Date().toISOString()
+      };
+      list.push(newItem);
+      resultItem = newItem;
+    }
+    setStorage(STORAGE_KEYS.CANDIDATE_SKILLS, list);
+
+    const completion = this.calculateProfileCompletion(candidateProfileId);
+    const cProfiles = getStorage<CandidateProfile[]>(STORAGE_KEYS.CANDIDATE_PROFILES, SEED_CANDIDATE_PROFILES);
+    const idx = cProfiles.findIndex(cp => cp.profile_id === candidateProfileId);
+    if (idx !== -1) {
+      cProfiles[idx].profile_completion = completion;
+      setStorage(STORAGE_KEYS.CANDIDATE_PROFILES, cProfiles);
+    }
+    return resultItem;
   }
 
   static updateCandidateSkill(candidateSkillId: string, level: 'Beginner' | 'Intermediate' | 'Advanced' | 'Expert'): void {
@@ -609,22 +706,39 @@ export class LocalDbService {
     if (existing) {
       return existing;
     }
+
+    const cp = this.getCandidateProfile(candidateProfile.id);
+    const candidateSkills = this.getCandidateSkills(candidateProfile.id);
+    const realReadiness = cp?.readiness_score || 0;
+    
+    let realSkillMatch = 0;
+    const jobSkills = job.skills_required || (job as any).skills || job.required_skills?.map(rs => rs.skill_name || rs.skill_id) || [];
+    if (jobSkills.length > 0) {
+      const matched = jobSkills.filter((reqSkill: string) =>
+        candidateSkills.some(cs => cs.skill?.name?.toLowerCase().includes(reqSkill.toLowerCase()) || cs.skill_id === reqSkill)
+      ).length;
+      realSkillMatch = Math.round((matched / jobSkills.length) * 100);
+    } else {
+      realSkillMatch = realReadiness;
+    }
+    const realOverall = Math.round((realReadiness + realSkillMatch) / 2);
+
     const newApp: Application = {
       id: `app-${Date.now()}`,
       candidate_id: candidateProfile.id,
       job_id: job.id,
       recruiter_id: job.recruiter_id,
       organization_id: job.organization_id,
-      skill_match_score: Math.floor(Math.random() * 25) + 75,
-      readiness_score: 82,
-      overall_match_score: Math.floor(Math.random() * 20) + 78,
+      skill_match_score: realSkillMatch,
+      readiness_score: realReadiness,
+      overall_match_score: realOverall,
       status: 'Applied',
       candidate: {
-        full_name: candidateProfile.full_name,
+        full_name: candidateProfile.full_name?.trim() || 'Candidate',
         email: candidateProfile.email,
-        target_job: 'Developer / Technical Specialist',
-        readiness_score: 82,
-        district: candidateProfile.district || 'Pune'
+        target_job: cp?.target_job || 'Unspecified Role',
+        readiness_score: realReadiness,
+        district: candidateProfile.district?.trim() || ''
       },
       job: {
         title: job.title,

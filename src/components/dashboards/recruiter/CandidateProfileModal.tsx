@@ -9,7 +9,7 @@ import {
 } from '../../../types';
 import { RecruiterService } from '../../../lib/recruiterService';
 import { SkillIntelligenceEngine } from '../../../lib/skillIntelligenceEngine';
-import { Card, Badge, Button } from '../../ui';
+import { Card, Badge, Button, UserAvatar } from '../../ui';
 import {
   X,
   Award,
@@ -170,11 +170,11 @@ export const CandidateProfileModal: React.FC<CandidateProfileModalProps> = ({
 
           <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
             <div className="relative">
-              <img
-                src={candidate.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80'}
-                alt={candidate.full_name}
-                className="w-16 h-16 md:w-20 md:h-20 rounded-2xl object-cover ring-4 ring-indigo-500/30 shadow-lg"
-                referrerPolicy="no-referrer"
+              <UserAvatar
+                avatarUrl={candidate.avatar_url}
+                name={candidate.full_name}
+                size="2xl"
+                className="w-16 h-16 md:w-20 md:h-20 rounded-2xl ring-4 ring-indigo-500/30 shadow-lg"
               />
               <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 ring-2 ring-slate-900">
                 <CheckCircle2 className="w-3 h-3" />

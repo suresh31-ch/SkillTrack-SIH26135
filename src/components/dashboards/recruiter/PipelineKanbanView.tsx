@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Application, Job, ApplicationStatus } from '../../../types';
-import { Card, Badge, Button } from '../../ui';
+import { Card, Badge, Button, UserAvatar } from '../../ui';
 import {
   Layers,
   Users,
@@ -178,21 +178,21 @@ export const PipelineKanbanView: React.FC<PipelineKanbanViewProps> = ({
                           {/* Card Top: Candidate info */}
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <img
-                                src={app.candidate?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80'}
-                                alt={app.candidate?.full_name || 'Candidate'}
-                                className="w-8 h-8 rounded-lg object-cover ring-1 ring-indigo-500/30 flex-shrink-0"
-                                referrerPolicy="no-referrer"
+                              <UserAvatar
+                                avatarUrl={app.candidate?.avatar_url}
+                                name={app.candidate?.full_name}
+                                size="sm"
+                                className="w-8 h-8 rounded-lg ring-1 ring-indigo-500/30 shrink-0"
                               />
                               <div className="min-w-0">
                                 <button
                                   onClick={() => onOpenCandidateProfile(app.candidate_id, app.id)}
                                   className="text-xs font-bold text-slate-900 dark:text-slate-100 hover:text-indigo-600 truncate text-left block"
                                 >
-                                  {app.candidate?.full_name}
+                                  {app.candidate?.full_name || 'Candidate'}
                                 </button>
                                 <div className="text-[10px] text-slate-500 truncate">
-                                  {app.candidate?.district || 'Pune'}
+                                  {app.candidate?.district || 'Location Unspecified'}
                                 </div>
                               </div>
                             </div>

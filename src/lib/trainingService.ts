@@ -573,6 +573,7 @@ export class TrainingService {
     candidate_district: string;
     batch_id: string;
     organization_id: string;
+    avatar_url?: string;
   }): Enrollment {
     const batches = this.getBatches();
     const batch = batches.find(b => b.id === data.batch_id);
@@ -588,16 +589,16 @@ export class TrainingService {
       candidate_email: data.candidate_email,
       candidate_phone: data.candidate_phone,
       candidate_district: data.candidate_district,
-      avatar_url: `https://images.unsplash.com/photo-${1534528741775 + Math.floor(Math.random() * 50)}?w=128&auto=format&fit=crop&q=80`,
+      avatar_url: data.avatar_url || '',
       organization_id: data.organization_id,
       enrollment_date: new Date().toISOString().split('T')[0],
       completion_status: 'enrolled',
-      progress_percentage: 10,
+      progress_percentage: 0,
       modules_completed: 0,
       total_modules: 4,
       assessment_status: 'pending',
       assessment_score: 0,
-      attendance_rate: 100
+      attendance_rate: 0
     };
 
     const enrollments = this.getEnrollments();

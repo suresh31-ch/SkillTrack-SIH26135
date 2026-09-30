@@ -1,5 +1,6 @@
-import React, { ReactNode } from 'react';
+import React, { ReactNode, useState } from 'react';
 import { cn } from '../../lib/utils';
+import { User } from 'lucide-react';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'success';
@@ -29,12 +30,12 @@ export const Button: React.FC<ButtonProps> = ({
   };
 
   const variantStyles = {
-    primary: "bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-700 focus:ring-indigo-500 shadow-indigo-600/10",
-    secondary: "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 hover:border-slate-400 focus:ring-slate-400 shadow-slate-900/5",
+    primary: "bg-teal-700 hover:bg-teal-800 text-white border border-teal-800 focus:ring-teal-600 shadow-xs",
+    secondary: "bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 hover:border-slate-400 focus:ring-slate-400 shadow-2xs",
     outline: "bg-transparent hover:bg-slate-100 text-slate-700 border border-slate-300 focus:ring-slate-400",
     ghost: "bg-transparent hover:bg-slate-100 text-slate-600 hover:text-slate-900 shadow-none border-transparent focus:ring-slate-400",
-    danger: "bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 focus:ring-rose-500 shadow-rose-600/10",
-    success: "bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 focus:ring-emerald-500 shadow-emerald-600/10"
+    danger: "bg-rose-600 hover:bg-rose-700 text-white border border-rose-700 focus:ring-rose-500 shadow-xs",
+    success: "bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 focus:ring-emerald-500 shadow-xs"
   };
 
   return (
@@ -65,8 +66,8 @@ export const Card: React.FC<{
       id={id}
       onClick={onClick}
       className={cn(
-        "rounded-xl border border-slate-200 bg-white text-slate-900 shadow-sm",
-        onClick && "cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all",
+        "rounded-xl border border-slate-200/90 bg-white text-slate-900 shadow-2xs",
+        onClick && "cursor-pointer hover:border-teal-400/80 hover:shadow-xs transition-all",
         className
       )}
     >
@@ -81,19 +82,19 @@ export const Badge: React.FC<{
   className?: string;
 }> = ({ children, variant = 'default', className }) => {
   const variantStyles = {
-    default: "bg-slate-100 text-slate-700 border-slate-200",
-    primary: "bg-indigo-50 text-indigo-700 border-indigo-200",
-    success: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    warning: "bg-amber-50 text-amber-700 border-amber-200",
-    danger: "bg-rose-50 text-rose-700 border-rose-200",
-    purple: "bg-purple-50 text-purple-700 border-purple-200",
+    default: "bg-slate-50 text-slate-700 border-slate-200",
+    primary: "bg-teal-50 text-teal-800 border-teal-200",
+    success: "bg-emerald-50 text-emerald-800 border-emerald-200",
+    warning: "bg-amber-50 text-amber-800 border-amber-200",
+    danger: "bg-rose-50 text-rose-800 border-rose-200",
+    purple: "bg-indigo-50 text-indigo-800 border-indigo-200",
     outline: "bg-transparent text-slate-600 border-slate-300"
   };
 
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border uppercase tracking-wider whitespace-nowrap",
+        "inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border tracking-wide whitespace-nowrap",
         variantStyles[variant],
         className
       )}
@@ -179,3 +180,130 @@ export const Modal: React.FC<{
     </div>
   );
 };
+
+export interface UserAvatarProps {
+  avatarUrl?: string | null;
+  name?: string | null;
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  className?: string;
+}
+
+export const UserAvatar: React.FC<UserAvatarProps> = ({
+  avatarUrl,
+  name,
+  size = 'md',
+  className
+}) => {
+  const [imageError, setImageError] = useState(false);
+
+  const sizeMap = {
+    xs: { box: 'w-6 h-6 text-[10px]', icon: 'w-3 h-3' },
+    sm: { box: 'w-8 h-8 text-xs', icon: 'w-4 h-4' },
+    md: { box: 'w-10 h-10 text-sm', icon: 'w-5 h-5' },
+    lg: { box: 'w-12 h-12 text-base', icon: 'w-6 h-6' },
+    xl: { box: 'w-16 h-16 text-lg', icon: 'w-8 h-8' },
+    '2xl': { box: 'w-20 h-20 text-xl font-bold', icon: 'w-10 h-10' }
+  };
+
+  const currentSize = sizeMap[size] || sizeMap.md;
+
+  // Compute clean initials if name is provided
+  const getInitials = (n?: string | null): string => {
+    if (!n || !n.trim()) return '';
+    const parts = n.trim().split(/\s+/).filter(Boolean);
+    if (parts.length === 0) return '';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const initials = getInitials(name);
+
+  // If a valid avatar URL exists and hasn't errored
+  if (avatarUrl && avatarUrl.trim() && !imageError) {
+    return (
+      <div className={cn("rounded-lg overflow-hidden shrink-0 border border-slate-200 bg-slate-100 flex items-center justify-center", currentSize.box, className)}>
+        <img
+          src={avatarUrl.trim()}
+          alt={name || 'User Avatar'}
+          onError={() => setImageError(true)}
+          className="w-full h-full object-cover"
+        />
+      </div>
+    );
+  }
+
+  // If no photo or errored, render clean initials
+  if (initials) {
+    return (
+      <div
+        className={cn(
+          "rounded-lg overflow-hidden shrink-0 font-bold flex items-center justify-center bg-teal-800 text-teal-50 border border-teal-700/80 select-none shadow-2xs",
+          currentSize.box,
+          className
+        )}
+        title={name || undefined}
+      >
+        {initials}
+      </div>
+    );
+  }
+
+  // Fallback to neutral profile icon
+  return (
+    <div
+      className={cn(
+        "rounded-lg overflow-hidden shrink-0 flex items-center justify-center bg-slate-100 text-slate-500 border border-slate-200 select-none",
+        currentSize.box,
+        className
+      )}
+      title="No profile picture"
+    >
+      <User className={currentSize.icon} />
+    </div>
+  );
+};
+
+export interface EmptyStateProps {
+  icon?: ReactNode;
+  title: string;
+  description: string;
+  actionText?: string;
+  onAction?: () => void;
+  className?: string;
+}
+
+export const EmptyState: React.FC<EmptyStateProps> = ({
+  icon,
+  title,
+  description,
+  actionText,
+  onAction,
+  className
+}) => {
+  return (
+    <div
+      className={cn(
+        "flex flex-col items-center justify-center text-center p-8 rounded-xl border border-dashed border-slate-300 bg-slate-50/50 text-slate-600 space-y-3",
+        className
+      )}
+    >
+      {icon && (
+        <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500 mb-1">
+          {icon}
+        </div>
+      )}
+      <div className="max-w-md space-y-1">
+        <h4 className="text-sm font-bold text-slate-900">{title}</h4>
+        <p className="text-xs text-slate-500 leading-relaxed">{description}</p>
+      </div>
+      {actionText && onAction && (
+        <div className="pt-2">
+          <Button size="sm" variant="primary" onClick={onAction}>
+            {actionText}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+

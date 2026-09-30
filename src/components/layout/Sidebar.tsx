@@ -31,7 +31,8 @@ import {
   Calculator,
   Brain,
   FileText,
-  Clock
+  Clock,
+  Compass
 } from 'lucide-react';
 import { Badge } from '../ui';
 
@@ -68,6 +69,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" /> },
               { id: 'profile', label: 'My Profile', icon: <User className="w-4 h-4" /> },
               { id: 'skills', label: 'My Skills', icon: <Sparkles className="w-4 h-4" /> },
+              { id: 'career_goals', label: 'Career Goals', icon: <Compass className="w-4 h-4" /> },
+              { id: 'companies', label: 'Companies & Roles', icon: <Building2 className="w-4 h-4" /> },
               { id: 'skill_gap', label: 'Skill Gap', icon: <TrendingUp className="w-4 h-4" /> }
             ]
           },
@@ -76,6 +79,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             items: [
               { id: 'ai_roadmap', label: 'AI Roadmap', icon: <Map className="w-4 h-4" /> },
               { id: 'learning', label: 'Learning Hub', icon: <GraduationCap className="w-4 h-4" /> },
+              { id: 'portfolio', label: 'Career Portfolio', icon: <Layers className="w-4 h-4" /> },
               { id: 'assessments', label: 'Assessments', icon: <CheckSquare className="w-4 h-4" /> },
               { id: 'code_lab', label: 'Code Lab', icon: <Code2 className="w-4 h-4" /> },
               { id: 'certifications', label: 'Certifications', icon: <Award className="w-4 h-4" /> }
@@ -84,9 +88,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {
             section: 'Career & Retention',
             items: [
-              { id: 'jobs', label: 'Jobs', icon: <Briefcase className="w-4 h-4" /> },
-              { id: 'applications', label: 'Applications', icon: <Send className="w-4 h-4" /> },
-              { id: 'employment', label: 'Employment', icon: <ShieldCheck className="w-4 h-4" />, badge: 'EPFO Sim' }
+              { id: 'jobs', label: 'Internships & Drives', icon: <Briefcase className="w-4 h-4" /> },
+              { id: 'applications', label: 'Application Tracker', icon: <Send className="w-4 h-4" /> },
+              { id: 'employment', label: 'Post-Placement Hub', icon: <ShieldCheck className="w-4 h-4" />, badge: 'Longitudinal' }
             ]
           }
         ];
@@ -192,17 +196,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <aside
-        className={`fixed md:sticky top-16 z-30 h-[calc(100vh-4rem)] w-64 shrink-0 border-r border-slate-800 bg-slate-900 text-slate-300 flex flex-col justify-between transition-transform duration-200 ease-in-out ${
+        className={`fixed md:sticky top-16 z-30 h-[calc(100vh-4rem)] w-64 shrink-0 border-r border-slate-800/80 bg-[#090d16] text-slate-300 flex flex-col justify-between transition-transform duration-200 ease-in-out select-none ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
         }`}
       >
-        <div className="flex-1 p-3 overflow-y-auto space-y-5">
+        <div className="flex-1 p-3.5 overflow-y-auto space-y-6">
           {navSections.map((sec, idx) => (
             <div key={idx} className="space-y-1">
-              <div className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+              <div className="px-3 text-[10px] font-semibold uppercase tracking-wider text-slate-400/80 mb-2">
                 {sec.section}
               </div>
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {sec.items.map(item => {
                   const isActive = activeTab === item.id;
                   return (
@@ -212,21 +216,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onTabChange(item.id);
                         if (onClose) onClose();
                       }}
-                      className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs transition-colors cursor-pointer ${
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors cursor-pointer text-left ${
                         isActive
-                          ? 'bg-indigo-600/10 text-indigo-400 font-semibold border border-indigo-600/20'
-                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800 font-medium'
+                          ? 'bg-teal-500/10 text-teal-300 font-semibold border border-teal-500/30 shadow-xs'
+                          : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60 font-medium border border-transparent'
                       }`}
                       id={`nav-item-${item.id}`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <span className={isActive ? 'text-indigo-400' : 'text-slate-400 opacity-70'}>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className={`shrink-0 ${isActive ? 'text-teal-400' : 'text-slate-400/80'}`}>
                           {item.icon}
                         </span>
                         <span className="truncate">{item.label}</span>
                       </div>
                       {item.badge && (
-                        <span className="text-[9px] font-bold bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/30 uppercase">
+                        <span className="text-[9px] font-semibold text-teal-300 bg-teal-950/60 border border-teal-800/80 px-1.5 py-0.5 rounded tracking-wide shrink-0">
                           {item.badge}
                         </span>
                       )}
@@ -238,24 +242,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           ))}
         </div>
 
-        {/* Sidebar High Density Footer */}
-        <div className="p-3 border-t border-slate-800 bg-slate-900/90 shrink-0 space-y-2">
+        {/* Sidebar Enterprise Footer */}
+        <div className="p-3.5 border-t border-slate-800/80 bg-[#070b13] shrink-0 space-y-2.5">
           {organization && (
-            <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-800/60 rounded-lg border border-slate-800">
-              <div className="w-7 h-7 rounded bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-[10px] font-bold text-indigo-300 shrink-0">
+            <div className="flex items-center gap-2.5 px-3 py-2 bg-slate-900/80 rounded-lg border border-slate-800/90">
+              <div className="w-7 h-7 rounded bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-[10px] font-bold text-teal-300 shrink-0">
                 {organization.name.substring(0, 2).toUpperCase()}
               </div>
               <div className="overflow-hidden min-w-0 flex-1">
-                <p className="text-xs font-bold text-white truncate">{organization.name}</p>
-                <p className="text-[10px] text-slate-400 truncate">{organization.subscription_plan} Plan</p>
+                <p className="text-xs font-bold text-slate-100 truncate">{organization.name}</p>
+                <p className="text-[10px] text-slate-400 truncate">{organization.subscription_plan} Edition</p>
               </div>
             </div>
           )}
-          <div className="flex items-center justify-between px-2 pt-1 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-            <span>SkillTrack Enterprise</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-emerald-400 text-[9px]">ONLINE</span>
-              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+          <div className="flex items-center justify-between px-2 pt-0.5 text-[10px] text-slate-400 font-medium">
+            <span>SkillTrack Platform</span>
+            <div className="flex items-center gap-1.5 text-[10px] text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span>Active</span>
             </div>
           </div>
         </div>

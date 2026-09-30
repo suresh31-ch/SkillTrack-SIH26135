@@ -11,6 +11,7 @@ import { AssessmentScoreView } from './AssessmentScoreView';
 import { CodingPracticeView } from './CodingPracticeView';
 import { AssessmentProgressDashboard } from './AssessmentProgressDashboard';
 import { Card, Button, Badge } from '../../../ui';
+import { useAuth } from '../../../../context/AuthContext';
 import {
   CheckSquare,
   Code2,
@@ -28,12 +29,19 @@ export type AssessmentSubView = 'dashboard' | 'quiz' | 'score' | 'coding';
 interface AssessmentModuleProps {
   initialSubView?: AssessmentSubView;
   initialSkill?: SupportedSkill;
+  candidateProfileId?: string;
+  onRefreshSkills?: () => void;
 }
 
 export const AssessmentModule: React.FC<AssessmentModuleProps> = ({
   initialSubView = 'dashboard',
-  initialSkill = 'Python'
+  initialSkill = 'Python',
+  candidateProfileId,
+  onRefreshSkills
 }) => {
+  const { profile, candidateProfile, isDemoMode } = useAuth();
+  const effectiveCandidateId = candidateProfileId || candidateProfile?.id || profile?.id || (isDemoMode ? 'prof-cand-001' : '');
+
   const [activeSubView, setActiveSubView] = useState<AssessmentSubView>(initialSubView);
   const [activeSkill, setActiveSkill] = useState<SupportedSkill>(initialSkill);
   const [activeDifficulty, setActiveDifficulty] = useState<AssessmentDifficulty>('Beginner');
@@ -59,6 +67,9 @@ export const AssessmentModule: React.FC<AssessmentModuleProps> = ({
     setCompletedQuestions(questions);
     setCompletedUserAnswers(userAnswers);
     setActiveSubView('score');
+    if (onRefreshSkills) {
+      onRefreshSkills();
+    }
   };
 
   const handleGoToCodingPractice = (skillLanguage?: string) => {
@@ -127,6 +138,7 @@ export const AssessmentModule: React.FC<AssessmentModuleProps> = ({
       {/* Dynamic View Rendering */}
       {activeSubView === 'dashboard' && (
         <AssessmentProgressDashboard
+          candidateProfileId={effectiveCandidateId}
           onStartAssessment={(skill, diff) => handleStartQuiz(skill || 'Python', diff || 'Beginner')}
           onGoToCodingPractice={handleGoToCodingPractice}
         />
@@ -136,6 +148,7 @@ export const AssessmentModule: React.FC<AssessmentModuleProps> = ({
         <AssessmentQuizView
           initialSkill={activeSkill}
           initialDifficulty={activeDifficulty}
+          candidateProfileId={effectiveCandidateId}
           onAssessmentCompleted={handleAssessmentCompleted}
           onCancel={() => setActiveSubView('dashboard')}
         />

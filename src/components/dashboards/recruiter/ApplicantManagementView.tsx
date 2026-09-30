@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Application, Job, ApplicationStatus } from '../../../types';
-import { Card, Badge, Button, Input } from '../../ui';
+import { Card, Badge, Button, Input, UserAvatar } from '../../ui';
 import {
   Users,
   Search,
@@ -224,12 +224,12 @@ export const ApplicantManagementView: React.FC<ApplicantManagementViewProps> = (
               >
                 {/* Left: Avatar & Candidate Info */}
                 <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
-                  <div className="relative flex-shrink-0">
-                    <img
-                      src={app.candidate?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=128&auto=format&fit=crop&q=80'}
-                      alt={app.candidate?.full_name || 'Candidate'}
-                      className="w-12 h-12 rounded-xl object-cover ring-2 ring-indigo-500/20 shadow-sm"
-                      referrerPolicy="no-referrer"
+                  <div className="relative shrink-0">
+                    <UserAvatar
+                      avatarUrl={app.candidate?.avatar_url}
+                      name={app.candidate?.full_name}
+                      size="lg"
+                      className="w-12 h-12 rounded-xl ring-2 ring-indigo-500/20 shadow-sm"
                     />
                     <span className="absolute -bottom-1 -right-1 bg-emerald-500 text-white rounded-full p-0.5 ring-2 ring-white dark:ring-slate-900" title="Verified SkillTrack Profile">
                       <CheckCircle2 className="w-2.5 h-2.5" />

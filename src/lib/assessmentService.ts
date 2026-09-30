@@ -12,6 +12,17 @@ import {
   SEED_HISTORICAL_ASSESSMENTS,
   SEED_SOLVED_PROBLEMS
 } from './assessmentData';
+import { LocalDbService } from './supabase';
+import { CandidateService } from './candidateService';
+
+export const ASSESSMENT_SKILL_MAPPINGS: Record<SupportedSkill, { skillId: string; canonicalName: string }> = {
+  'Python': { skillId: 'sk-04', canonicalName: 'Python & Data Analytics' },
+  'React': { skillId: 'sk-01', canonicalName: 'React.js & TypeScript' },
+  'SQL': { skillId: 'sk-03', canonicalName: 'PostgreSQL & Database Design' },
+  'JavaScript': { skillId: 'sk-01', canonicalName: 'React.js & TypeScript' },
+  'C++': { skillId: 'sk-21', canonicalName: 'Embedded Systems & IoT (ESP32/STM32)' },
+  'Java': { skillId: 'sk-02', canonicalName: 'Node.js & Express API' }
+};
 
 const STORAGE_KEYS = {
   ASSESSMENT_HISTORY: 'skilltrack_assessment_history_v2',
@@ -79,11 +90,21 @@ export class AssessmentService {
   /**
    * Get all historical assessment results for candidate
    */
-  static getAssessmentHistory(): HistoricalAssessmentRecord[] {
-    return getStorage<HistoricalAssessmentRecord[]>(
+  static getAssessmentHistory(candidateProfileId?: string): HistoricalAssessmentRecord[] {
+    const allHistory = getStorage<HistoricalAssessmentRecord[]>(
       STORAGE_KEYS.ASSESSMENT_HISTORY,
       SEED_HISTORICAL_ASSESSMENTS
     );
+
+    if (!candidateProfileId) {
+      return [];
+    }
+
+    if (candidateProfileId === 'prof-cand-001') {
+      return allHistory.filter(h => !h.candidateProfileId || h.candidateProfileId === 'prof-cand-001');
+    }
+
+    return allHistory.filter(h => h.candidateProfileId === candidateProfileId);
   }
 
   /**
@@ -94,9 +115,13 @@ export class AssessmentService {
     difficulty: AssessmentDifficulty,
     score: number,
     totalQuestions: number,
-    timeSpentSeconds: number
+    timeSpentSeconds: number,
+    candidateProfileId: string
   ): HistoricalAssessmentRecord {
-    const history = this.getAssessmentHistory();
+    const history = getStorage<HistoricalAssessmentRecord[]>(
+      STORAGE_KEYS.ASSESSMENT_HISTORY,
+      SEED_HISTORICAL_ASSESSMENTS
+    );
     const percentage = Math.round((score / totalQuestions) * 100);
 
     let performanceLevel = 'Needs Practice';
@@ -109,6 +134,7 @@ export class AssessmentService {
 
     const newRecord: HistoricalAssessmentRecord = {
       id: `hist-${Date.now()}`,
+      candidateProfileId,
       assessmentId: `asm-${skill.toLowerCase()}-${difficulty.toLowerCase()}`,
       skill,
       difficulty,
@@ -124,28 +150,90 @@ export class AssessmentService {
 
     history.unshift(newRecord);
     setStorage(STORAGE_KEYS.ASSESSMENT_HISTORY, history);
+
+    // Promote verified skill evidence in local database when assessment is passed (>= 70%)
+    if (percentage >= 70 && candidateProfileId) {
+      const mapping = ASSESSMENT_SKILL_MAPPINGS[skill];
+      if (mapping) {
+        const proficiencyLevel: 'Beginner' | 'Intermediate' | 'Advanced' =
+          difficulty === 'Advanced' ? 'Advanced' : difficulty === 'Intermediate' ? 'Intermediate' : 'Beginner';
+        LocalDbService.upsertCandidateSkillWithEvidence(
+          candidateProfileId,
+          mapping.skillId,
+          proficiencyLevel,
+          true,
+          `SkillTrack MSIAS ${difficulty} Assessment (${percentage}%)`
+        );
+        CandidateService.upsertCandidateSkillWithEvidence(
+          candidateProfileId,
+          mapping.skillId,
+          proficiencyLevel,
+          true,
+          `SkillTrack MSIAS ${difficulty} Assessment (${percentage}%)`
+        ).catch(e => console.warn('CandidateService skill sync note:', e));
+      }
+    }
+
+    // Record formal assessment result for cohort audit trail
+    try {
+      LocalDbService.recordAssessmentResult({
+        candidate_id: candidateProfileId,
+        candidate_name: 'Candidate',
+        assessment_id: newRecord.assessmentId,
+        assessment_title: newRecord.title,
+        skill_id: ASSESSMENT_SKILL_MAPPINGS[skill]?.skillId || 'sk-01',
+        skill_name: ASSESSMENT_SKILL_MAPPINGS[skill]?.canonicalName || skill,
+        score: percentage,
+        percentage: percentage,
+        passed: percentage >= 70,
+        certificate_issued: percentage >= 80,
+        time_spent_minutes: Math.max(1, Math.ceil(timeSpentSeconds / 60))
+      });
+    } catch (e) {
+      console.warn('Notice recording assessment result:', e);
+    }
+
     return newRecord;
   }
 
   /**
    * Get list of solved coding problems
    */
-  static getSolvedProblems(): SolvedProblemRecord[] {
-    return getStorage<SolvedProblemRecord[]>(
+  static getSolvedProblems(candidateProfileId?: string): SolvedProblemRecord[] {
+    const all = getStorage<SolvedProblemRecord[]>(
       STORAGE_KEYS.SOLVED_PROBLEMS,
       SEED_SOLVED_PROBLEMS
     );
+
+    if (!candidateProfileId) {
+      return [];
+    }
+
+    if (candidateProfileId === 'prof-cand-001') {
+      return all.filter(s => !s.candidateProfileId || s.candidateProfileId === 'prof-cand-001');
+    }
+
+    return all.filter(s => s.candidateProfileId === candidateProfileId);
   }
 
   /**
    * Record a solved coding problem
    */
-  static recordSolvedProblem(problem: CodingProblem, passedTests: number, totalTests: number): SolvedProblemRecord {
-    const list = this.getSolvedProblems();
-    const existingIdx = list.findIndex(p => p.problemId === problem.id);
+  static recordSolvedProblem(
+    problem: CodingProblem,
+    passedTests: number,
+    totalTests: number,
+    candidateProfileId?: string
+  ): SolvedProblemRecord {
+    const list = getStorage<SolvedProblemRecord[]>(
+      STORAGE_KEYS.SOLVED_PROBLEMS,
+      SEED_SOLVED_PROBLEMS
+    );
+    const existingIdx = list.findIndex(p => p.problemId === problem.id && (!candidateProfileId || p.candidateProfileId === candidateProfileId));
 
     const record: SolvedProblemRecord = {
       id: existingIdx !== -1 ? list[existingIdx].id : `sol-${Date.now()}`,
+      candidateProfileId,
       problemId: problem.id,
       title: problem.title,
       language: problem.language,
@@ -168,9 +256,9 @@ export class AssessmentService {
   /**
    * Calculate live candidate dashboard metrics
    */
-  static getMetrics(): AssessmentMetrics {
-    const history = this.getAssessmentHistory();
-    const solved = this.getSolvedProblems();
+  static getMetrics(candidateProfileId?: string): AssessmentMetrics {
+    const history = this.getAssessmentHistory(candidateProfileId);
+    const solved = this.getSolvedProblems(candidateProfileId);
     const totalAvailableAssessments = 18; // 6 skills * 3 difficulties
     const totalCodingProblems = CODING_PROBLEMS_DATA.length;
 
@@ -182,7 +270,6 @@ export class AssessmentService {
     const uniqueSkillsAssessed = new Set(history.map(h => h.skill));
     const skillsAssessedCount = uniqueSkillsAssessed.size;
 
-    // Progress percentage based on completed assessments out of total target track
     const currentProgressPct = Math.min(100, Math.round((completedAssessments / totalAvailableAssessments) * 100));
 
     return {
@@ -199,18 +286,18 @@ export class AssessmentService {
   /**
    * Generate skill-wise progress breakdown
    */
-  static getSkillWiseProgress(): SkillProgressData[] {
-    const history = this.getAssessmentHistory();
-    const solved = this.getSolvedProblems();
+  static getSkillWiseProgress(candidateProfileId?: string): SkillProgressData[] {
+    const history = this.getAssessmentHistory(candidateProfileId);
+    const solved = this.getSolvedProblems(candidateProfileId);
     const skillsList: SupportedSkill[] = ['Python', 'Java', 'C++', 'SQL', 'JavaScript', 'React'];
 
     return skillsList.map(skill => {
       const skillAttempts = history.filter(h => h.skill === skill);
-      const skillSolved = solved.filter(s => s.language === skill || (skill === 'React' && s.language === 'Python')); // Map relevant practice
+      const skillSolved = solved.filter(s => s.language === skill);
 
       const avgScore = skillAttempts.length > 0
         ? Math.round(skillAttempts.reduce((a, b) => a + b.percentage, 0) / skillAttempts.length)
-        : (skill === 'React' ? 85 : skill === 'JavaScript' ? 80 : 70);
+        : 0;
 
       // Determine highest difficulty completed
       let highestLevel = 'None';
@@ -224,7 +311,9 @@ export class AssessmentService {
         highestLevel = 'Attempted';
       }
 
-      const masteryPct = Math.min(100, Math.round((avgScore * 0.7) + (skillAttempts.length * 10)));
+      const masteryPct = skillAttempts.length > 0
+        ? Math.min(100, Math.round((avgScore * 0.7) + (skillAttempts.length * 10)))
+        : 0;
 
       return {
         skill,

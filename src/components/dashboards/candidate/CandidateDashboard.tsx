@@ -17,7 +17,15 @@ import { SkillGapView } from './SkillGapView';
 import { MicroRoadmapView } from './MicroRoadmapView';
 import { AssessmentModule } from './assessment/AssessmentModule';
 import { LearningHub } from '../../learning/LearningHub';
-import { Button, Card, Badge, Input, Modal } from '../../ui';
+import { CareerGoalsView } from './views/CareerGoalsView';
+import { CompanyRoleExplorerView } from './views/CompanyRoleExplorerView';
+import { CareerPortfolioView } from './views/CareerPortfolioView';
+import { CompanySkillGapView } from './views/CompanySkillGapView';
+import { PreApplicationReviewModal } from './views/PreApplicationReviewModal';
+import { StudentOnboardingModal } from './views/StudentOnboardingModal';
+import { CompanyRoleProfile } from '../../../types/studentJourney';
+import { StudentJourneyService } from '../../../lib/studentJourneyService';
+import { Button, Card, Badge, Input, Modal, UserAvatar, EmptyState } from '../../ui';
 import { formatCurrency, formatDate } from '../../../lib/utils';
 import { useToast } from '../../../context/ToastContext';
 import Editor from '@monaco-editor/react';
@@ -78,10 +86,10 @@ interface CandidateDashboardProps {
 }
 
 export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTab, onTabChange }) => {
-  const { profile, candidateProfile, organization, refreshProfile, isSupabaseLive } = useAuth();
+  const { profile, candidateProfile, organization, refreshProfile, isSupabaseLive, isDemoMode } = useAuth();
   const { showToast } = useToast();
 
-  const candidateId = profile?.id || 'prof-cand-001';
+  const candidateId = profile?.id || candidateProfile?.id || (isDemoMode ? 'prof-cand-001' : '');
 
   // Loading & Error States
   const [isLoadingData, setIsLoadingData] = useState(true);
@@ -99,18 +107,18 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
   const [jobRoleSkills, setJobRoleSkills] = useState<JobRoleSkill[]>(() => LocalDbService.getJobRoleSkills());
   const [roadmapItems, setRoadmapItems] = useState<RoadmapItem[]>(() => LocalDbService.getRoadmapItems());
   const [candidateRoadmapProgress, setCandidateRoadmapProgress] = useState<CandidateRoadmapProgress[]>(() =>
-    LocalDbService.getCandidateRoadmapProgress(candidateId)
+    candidateId ? LocalDbService.getCandidateRoadmapProgress(candidateId) : []
   );
   const [selectedRoadmapSkillId, setSelectedRoadmapSkillId] = useState<string | undefined>(undefined);
 
   // Job & Application state
   const [jobs, setJobs] = useState<any[]>(() => LocalDbService.getJobs(organization?.id));
-  const [applications, setApplications] = useState<any[]>(() => LocalDbService.getCandidateApplications(candidateId));
-  const [certifications, setCertifications] = useState<any[]>(() => LocalDbService.getCertifications(organization?.id));
+  const [applications, setApplications] = useState<any[]>(() => candidateId ? LocalDbService.getCandidateApplications(candidateId) : []);
+  const [certifications, setCertifications] = useState<any[]>(() => candidateId ? LocalDbService.getCertifications(organization?.id).filter(c => c.candidate_id === candidateId) : []);
   const [assessments, setAssessments] = useState<any[]>(() => LocalDbService.getAssessments(organization?.id));
-  const [results, setResults] = useState<any[]>(() => LocalDbService.getAssessmentResults(candidateId));
-  const [placements, setPlacements] = useState<any[]>(() => LocalDbService.getPlacements(organization?.id));
-  const [verifications, setVerifications] = useState<any[]>(() => LocalDbService.getEmploymentVerifications(organization?.id));
+  const [results, setResults] = useState<any[]>(() => candidateId ? LocalDbService.getAssessmentResults(candidateId) : []);
+  const [placements, setPlacements] = useState<any[]>(() => candidateId ? LocalDbService.getPlacements(organization?.id).filter(p => p.candidate_id === candidateId) : []);
+  const [verifications, setVerifications] = useState<any[]>(() => candidateId ? LocalDbService.getEmploymentVerifications(organization?.id).filter(v => v.candidate_id === candidateId) : []);
   const [courses, setCourses] = useState<any[]>(() => LocalDbService.getCourses(organization?.id));
 
   // Modals state
@@ -129,12 +137,12 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [phone, setPhone] = useState(profile?.phone || '');
   const [district, setDistrict] = useState(profile?.district || '');
-  const [targetJob, setTargetJob] = useState(candidateProfile?.target_job || 'Full Stack Web Developer');
-  const [education, setEducation] = useState(candidateProfile?.education || 'Bachelor of Technology (B.Tech)');
-  const [degree, setDegree] = useState(candidateProfile?.degree || 'Computer Engineering');
-  const [gradYear, setGradYear] = useState<number>(candidateProfile?.graduation_year || 2025);
+  const [targetJob, setTargetJob] = useState(candidateProfile?.target_job || '');
+  const [education, setEducation] = useState(candidateProfile?.education || '');
+  const [degree, setDegree] = useState(candidateProfile?.degree || '');
+  const [gradYear, setGradYear] = useState<number | undefined>(candidateProfile?.graduation_year);
   const [expYears, setExpYears] = useState<number>(candidateProfile?.experience_years || 0);
-  const [employmentStatus, setEmploymentStatus] = useState<any>(candidateProfile?.employment_status || 'in_training');
+  const [employmentStatus, setEmploymentStatus] = useState<any>(candidateProfile?.employment_status || 'unemployed');
 
   // Assessment & Code Sandbox State
   const [activeAssessment, setActiveAssessment] = useState<any>(null);
@@ -144,6 +152,12 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
   const [code, setCode] = useState('// Write TypeScript / JavaScript here\nfunction calculateReadiness(score) {\n  console.log("Candidate Readiness Score: " + score + "/100");\n  return score >= 80 ? "Job Ready" : "Requires Upskilling";\n}\n\nconsole.log(calculateReadiness(85));');
   const [isExecutingCode, setIsExecutingCode] = useState(false);
   const [codeOutput, setCodeOutput] = useState<string>('');
+
+  // Career Destination, Company Explorer & Portfolio States
+  const [selectedCompanyIdForExplorer, setSelectedCompanyIdForExplorer] = useState<string>('comp-google');
+  const [selectedCompanyRoleForPreApply, setSelectedCompanyRoleForPreApply] = useState<CompanyRoleProfile | null>(null);
+  const [companySkillGapTarget, setCompanySkillGapTarget] = useState<{ companyName: string; roleTitle: string } | null>(null);
+  const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
 
   // Primary loader function from Supabase
   const loadData = async () => {
@@ -216,12 +230,12 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
       setDistrict(profile.district || '');
     }
     if (candidateProfile) {
-      setTargetJob(candidateProfile.target_job || 'Full Stack Web Developer');
-      setEducation(candidateProfile.education || 'Bachelor of Technology (B.Tech)');
-      setDegree(candidateProfile.degree || 'Computer Engineering');
-      setGradYear(candidateProfile.graduation_year || 2025);
+      setTargetJob(candidateProfile.target_job || '');
+      setEducation(candidateProfile.education || '');
+      setDegree(candidateProfile.degree || '');
+      setGradYear(candidateProfile.graduation_year);
       setExpYears(candidateProfile.experience_years || 0);
-      setEmploymentStatus(candidateProfile.employment_status || 'in_training');
+      setEmploymentStatus(candidateProfile.employment_status || 'unemployed');
     }
   }, [profile, candidateProfile]);
 
@@ -232,14 +246,15 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
 
   // AI Skill Gap Analysis Engine Computation
   const skillGapAnalysis: SkillGapAnalysisResult = useMemo(() => {
+    const effectiveRole = targetJob || candidateProfile?.target_job || (jobRoles.length > 0 ? jobRoles[0].name : 'Software Engineer');
     return CandidateService.analyzeSkillGap(
-      targetJob || 'Full Stack Web Developer',
+      effectiveRole,
       skills,
       jobRoles,
       jobRoleSkills,
       allMasterSkills
     );
-  }, [targetJob, skills, jobRoles, jobRoleSkills, allMasterSkills]);
+  }, [targetJob, candidateProfile?.target_job, skills, jobRoles, jobRoleSkills, allMasterSkills]);
 
   // Personalized Micro-Roadmap Pathways Computation
   const personalizedRoadmaps: LearningRoadmapSkill[] = useMemo(() => {
@@ -517,23 +532,18 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
   const overviewRadarData = useMemo(() => {
     const profToScore: Record<string, number> = {
       None: 0,
-      Beginner: 30,
+      'Not Assessed': 0,
+      Beginner: 25,
       Intermediate: 60,
       Advanced: 85,
       Expert: 100
     };
     if (skillGapAnalysis.items.length === 0) {
-      return [
-        { skill: 'React & TS', required: 90, candidate: 85 },
-        { skill: 'Node & API', required: 85, candidate: 75 },
-        { skill: 'PostgreSQL', required: 80, candidate: 65 },
-        { skill: 'Cloud GCP', required: 75, candidate: 45 },
-        { skill: 'System Design', required: 70, candidate: 50 }
-      ];
+      return [];
     }
     return skillGapAnalysis.items.slice(0, 6).map(item => ({
-      skill: item.skill_name.length > 12 ? item.skill_name.substring(0, 10) + '..' : item.skill_name,
-      required: profToScore[item.required_proficiency] || 75,
+      skill: item.skill_name.length > 14 ? item.skill_name.substring(0, 12) + '..' : item.skill_name,
+      required: profToScore[item.required_proficiency] || 60,
       candidate: profToScore[item.candidate_proficiency] || 0
     }));
   }, [skillGapAnalysis.items]);
@@ -715,66 +725,182 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
 
           {/* Active Course & Skill Gap Quick View */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Left: Active Course Progress */}
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <BookOpen className="w-3.5 h-3.5 text-indigo-600" /> Active Enrolled Course
-                </h3>
-                <Badge variant="success">Completed (100%)</Badge>
+            {/* Left: Active Course / Training Program */}
+            <Card className="p-4 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <BookOpen className="w-3.5 h-3.5 text-teal-600" /> Active Course / Learning Track
+                  </h3>
+                  {certifications.length > 0 ? (
+                    <Badge variant="success">Certified</Badge>
+                  ) : candidateRoadmapProgress.some(p => p.status === 'completed' || p.status === 'in_progress') ? (
+                    <Badge variant="primary">In Progress</Badge>
+                  ) : (
+                    <span className="text-[11px] text-slate-400 font-medium">Not Enrolled</span>
+                  )}
+                </div>
+
+                {certifications.length > 0 ? (
+                  <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">{certifications[0].course_name || 'Accredited Curriculum'}</h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">{certifications[0].training_center_name || 'SkillTrack Center'} · Cert #{certifications[0].certificate_number || 'ST-2026'}</p>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1">
+                      <span>Grade: {certifications[0].grade || 'A'}</span>
+                      <span className="text-emerald-700 font-semibold flex items-center gap-1">
+                        <ShieldCheck className="w-3 h-3 text-emerald-600" /> Verified Credential
+                      </span>
+                    </div>
+                  </div>
+                ) : candidateRoadmapProgress.some(p => p.status === 'completed' || p.status === 'in_progress') ? (
+                  <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">{targetJob} Curriculum Track</h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {candidateRoadmapProgress.filter(p => p.status === 'completed').length} of {candidateRoadmapProgress.length} roadmap items completed
+                      </p>
+                    </div>
+                    <div className="w-full bg-slate-200 rounded-full h-1.5">
+                      <div
+                        className="bg-teal-600 h-1.5 rounded-full transition-all"
+                        style={{
+                          width: `${candidateRoadmapProgress.length > 0 ? Math.round((candidateRoadmapProgress.filter(p => p.status === 'completed').length / candidateRoadmapProgress.length) * 100) : 0}%`
+                        }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>Active Pathway</span>
+                      <span className="text-teal-700 font-semibold">Self-Paced Practice</span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-center py-5 space-y-2">
+                    <p className="text-xs font-semibold text-slate-800">No active course enrollments yet</p>
+                    <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                      Explore interactive courses mapped to your {targetJob} career goals in the Learning Hub.
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-2.5">
-                <div>
-                  <h4 className="text-xs font-bold text-slate-900">Full Stack Cloud Application Engineering</h4>
-                  <p className="text-[11px] text-slate-500 mt-0.5">MSIAS Pune • Batch 2025-Q3 (Alpha)</p>
-                </div>
-
-                <div className="w-full bg-slate-200 rounded-full h-1.5">
-                  <div className="bg-emerald-600 h-1.5 rounded-full w-full" />
-                </div>
-
-                <div className="flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Duration: 4 Months (480 Hours)</span>
-                  <span className="text-emerald-700 font-semibold">Certificate Issued</span>
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between">
+              <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
                 <Button size="sm" variant="ghost" onClick={() => onTabChange('learning')} className="text-xs">
-                  View Course Modules
+                  Browse Learning Hub
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => onTabChange('certifications')} className="text-xs">
-                  View Certificate
-                </Button>
+                {certifications.length > 0 ? (
+                  <Button size="sm" variant="outline" onClick={() => onTabChange('certifications')} className="text-xs">
+                    View Certificates
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => onTabChange('ai_roadmap')} className="text-xs">
+                    View Career Roadmap
+                  </Button>
+                )}
               </div>
             </Card>
 
-            {/* Right: Skill Gap Matrix */}
-            <Card className="p-4">
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
-                  <TrendingUp className="w-3.5 h-3.5 text-indigo-600" /> Skill Gap Matrix vs Target Job
-                </h3>
-                <Button size="sm" variant="ghost" onClick={() => onTabChange('skill_gap')} className="text-xs">
-                  Detailed Analysis
-                </Button>
+            {/* Right: Skill Gap Matrix / Radar */}
+            <Card className="p-4 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                    <TrendingUp className="w-3.5 h-3.5 text-teal-600" /> Competency Radar vs {targetJob}
+                  </h3>
+                  <Button size="sm" variant="ghost" onClick={() => onTabChange('skill_gap')} className="text-xs">
+                    Full Skill Gap
+                  </Button>
+                </div>
+
+                {overviewRadarData.length === 0 || skills.length === 0 ? (
+                  <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-center py-6 space-y-2.5">
+                    <div className="w-10 h-10 rounded-full bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 mx-auto">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-900">No Competency Data Recorded</h4>
+                      <p className="text-[11px] text-slate-500 max-w-xs mx-auto mt-0.5">
+                        Add your existing skills or complete an assessment to generate your verified competency radar.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-center gap-2 pt-1">
+                      <Button size="sm" variant="primary" onClick={() => { onTabChange('skills'); setIsAddSkillOpen(true); }} className="text-xs">
+                        Add Skills
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => onTabChange('assessments')} className="text-xs">
+                        Take Assessment
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart data={overviewRadarData}>
+                        <PolarGrid stroke="#e2e8f0" />
+                        <PolarAngleAxis dataKey="skill" stroke="#64748b" tick={{ fill: '#475569', fontSize: 10, fontWeight: 500 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#cbd5e1" tick={{ fontSize: 9 }} />
+                        <Radar name="Target Requirement" dataKey="required" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} />
+                        <Radar name="My Verified/Declared" dataKey="candidate" stroke="#0d9488" fill="#0d9488" fillOpacity={0.35} />
+                        <Legend wrapperStyle={{ fontSize: '10px', color: '#475569' }} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
               </div>
 
-              <div className="h-52">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={overviewRadarData}>
-                    <PolarGrid stroke="#e2e8f0" />
-                    <PolarAngleAxis dataKey="skill" stroke="#64748b" tick={{ fill: '#475569', fontSize: 10, fontWeight: 500 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#cbd5e1" tick={{ fontSize: 9 }} />
-                    <Radar name="Market Requirement" dataKey="required" stroke="#6366f1" fill="#6366f1" fillOpacity={0.2} />
-                    <Radar name="My Competency" dataKey="candidate" stroke="#10b981" fill="#10b981" fillOpacity={0.3} />
-                    <Legend wrapperStyle={{ fontSize: '10px', color: '#475569' }} />
-                  </RadarChart>
-                </ResponsiveContainer>
+              <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
+                <span>{skills.length} Total Skills ({skills.filter(s => s.verified).length} Verified)</span>
+                <span className="font-semibold text-slate-700">Role Readiness: {skillGapAnalysis.readiness_score}%</span>
               </div>
             </Card>
           </div>
+
+          {/* Recent Assessment Results & Verified Evidence Section */}
+          <Card className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <CheckSquare className="w-3.5 h-3.5 text-teal-600" /> Recent Assessment History & Evidence
+              </h3>
+              <Button size="sm" variant="ghost" onClick={() => onTabChange('assessments')} className="text-xs">
+                Take Assessment
+              </Button>
+            </div>
+
+            {results.length === 0 ? (
+              <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-center py-5 space-y-2">
+                <p className="text-xs font-semibold text-slate-800">No assessment records yet</p>
+                <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+                  Complete technical assessments in Python, React, SQL, JavaScript, Java, or C++ to earn verified credentials for employer visibility.
+                </p>
+                <Button size="sm" variant="primary" onClick={() => onTabChange('assessments')} className="text-xs mt-1">
+                  Start an Assessment
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                {results.slice(0, 3).map((res, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border border-slate-200 bg-white hover:border-slate-300 transition-colors space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900 truncate max-w-[150px]">
+                        {res.assessment_title || res.title || 'Technical Assessment'}
+                      </span>
+                      <Badge variant={res.passed ? 'success' : 'warning'} className="text-[9px]">
+                        {res.passed ? 'Verified Pass' : 'Under Review'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Score Achieved</span>
+                      <strong className="text-slate-900 font-semibold">{res.score || res.percentage}%</strong>
+                    </div>
+                    <div className="text-[10px] text-slate-400">
+                      {formatDate(res.completed_at || new Date().toISOString())}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       )}
 
@@ -855,19 +981,23 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
             {/* Identity & Contact Card */}
             <Card className="p-4 lg:col-span-1 space-y-4">
               <div className="text-center space-y-2.5 pb-3 border-b border-slate-100">
-                <div className="w-20 h-20 rounded-xl mx-auto overflow-hidden bg-indigo-50 border-2 border-indigo-200 p-0.5 relative group">
-                  <img
-                    src={profile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=256'}
-                    alt={profile?.full_name}
-                    className="w-full h-full object-cover rounded-lg"
+                <div className="w-20 h-20 rounded-xl mx-auto overflow-hidden bg-slate-50 border-2 border-indigo-200 p-0.5 relative group flex items-center justify-center">
+                  <UserAvatar
+                    avatarUrl={profile?.avatar_url}
+                    name={profile?.full_name}
+                    size="2xl"
+                    className="w-full h-full rounded-lg"
                   />
                   <div className="absolute bottom-1 right-1 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full" title="Active" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">{profile?.full_name || 'Candidate Name'}</h3>
-                  <p className="text-xs font-semibold text-indigo-600">{candidateProfile?.target_job || 'Full Stack Web Developer'}</p>
+                  <h3 className="text-sm font-bold text-slate-900">{profile?.full_name?.trim() || 'My Profile'}</h3>
+                  <p className="text-xs font-semibold text-indigo-600">
+                    {candidateProfile?.target_job?.trim() || 'Target career role not set'}
+                  </p>
                   <div className="mt-1 flex items-center justify-center gap-1 text-xs text-slate-500">
-                    <MapPin className="w-3.5 h-3.5 text-slate-400" /> {profile?.district || 'Pune'}, Maharashtra
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                    {profile?.district?.trim() ? `${profile.district.trim()}, Maharashtra` : 'Location not specified'}
                   </div>
                 </div>
               </div>
@@ -1247,6 +1377,47 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
         </div>
       )}
 
+      {/* View: CAREER DESTINATIONS & GOAL SETTING */}
+      {activeTab === 'career_goals' && (
+        <CareerGoalsView
+          studentId={profile?.id || candidateId}
+          onExploreCompanyRoles={(comp) => {
+            setSelectedCompanyIdForExplorer(comp);
+            onTabChange('companies');
+          }}
+          onNavigateToSkillGap={(comp, role) => {
+            setCompanySkillGapTarget({ companyName: comp, roleTitle: role });
+            onTabChange('company_skill_gap');
+          }}
+        />
+      )}
+
+      {/* View: COMPANIES & ROLES DIRECTORY */}
+      {activeTab === 'companies' && (
+        <CompanyRoleExplorerView
+          initialCompanyId={selectedCompanyIdForExplorer}
+          studentId={profile?.id || candidateId}
+          onNavigateToSkillGap={(comp, role) => {
+            setCompanySkillGapTarget({ companyName: comp, roleTitle: role });
+            onTabChange('company_skill_gap');
+          }}
+          onOpenPreApplicationReview={(role) => setSelectedCompanyRoleForPreApply(role)}
+          onBackToDirectory={() => onTabChange('career_goals')}
+        />
+      )}
+
+      {/* View: COMPANY SPECIFIC SKILL GAP */}
+      {activeTab === 'company_skill_gap' && (
+        <CompanySkillGapView
+          studentId={profile?.id || candidateId}
+          initialCompany={companySkillGapTarget?.companyName || 'Google'}
+          initialRole={companySkillGapTarget?.roleTitle || 'Software Engineering Intern'}
+          onNavigateToLearning={() => onTabChange('learning')}
+          onNavigateToAssessments={() => onTabChange('assessments')}
+          onOpenPreApplyReview={(role) => setSelectedCompanyRoleForPreApply(role)}
+        />
+      )}
+
       {/* View 4: SKILL GAP ANALYSIS */}
       {activeTab === 'skill_gap' && (
         <SkillGapView
@@ -1281,14 +1452,36 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
         <LearningHub />
       )}
 
+      {/* View: CAREER PORTFOLIO & VERIFIED EVIDENCE */}
+      {activeTab === 'portfolio' && (
+        <CareerPortfolioView
+          studentId={profile?.id || candidateId}
+          onNavigateToAssessments={() => onTabChange('assessments')}
+          onOpenOnboarding={() => setIsOnboardingModalOpen(true)}
+        />
+      )}
+
       {/* View 7: ASSESSMENTS (Master Assessment Experience & Dashboard) */}
       {activeTab === 'assessments' && (
-        <AssessmentModule initialSubView="dashboard" />
+        <AssessmentModule
+          initialSubView="dashboard"
+          candidateProfileId={profile?.id || candidateId}
+          onRefreshSkills={() => {
+            loadData();
+            showToast('Assessment Recorded', 'Your verified skill evidence and competency score have been updated.', 'success');
+          }}
+        />
       )}
 
       {/* View 8: CODE LAB (Sandbox Practice & Test Cases) */}
       {activeTab === 'code_lab' && (
-        <AssessmentModule initialSubView="coding" />
+        <AssessmentModule
+          initialSubView="coding"
+          candidateProfileId={profile?.id || candidateId}
+          onRefreshSkills={() => {
+            loadData();
+          }}
+        />
       )}
 
       {/* View 9: CERTIFICATIONS */}
@@ -1868,6 +2061,37 @@ export const CandidateDashboard: React.FC<CandidateDashboardProps> = ({ activeTa
           </div>
         </div>
       </Modal>
+
+      {/* Pre-Application Review Checklist Modal */}
+      {selectedCompanyRoleForPreApply && (
+        <PreApplicationReviewModal
+          isOpen={Boolean(selectedCompanyRoleForPreApply)}
+          onClose={() => setSelectedCompanyRoleForPreApply(null)}
+          role={selectedCompanyRoleForPreApply}
+          studentId={profile?.id || candidateId}
+          onConfirmApplied={() => {
+            setSelectedCompanyRoleForPreApply(null);
+            onTabChange('applications');
+          }}
+        />
+      )}
+
+      {/* Student Onboarding & Career Profile Modal */}
+      {isOnboardingModalOpen && (
+        <StudentOnboardingModal
+          isOpen={isOnboardingModalOpen}
+          onClose={() => setIsOnboardingModalOpen(false)}
+          studentId={profile?.id || candidateId}
+          onComplete={() => {
+            setIsOnboardingModalOpen(false);
+            loadData();
+          }}
+          onNavigateToAssessments={() => {
+            setIsOnboardingModalOpen(false);
+            onTabChange('assessments');
+          }}
+        />
+      )}
     </div>
   );
 };

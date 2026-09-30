@@ -482,6 +482,81 @@ export class CandidateService {
   }
 
   /**
+   * Upsert candidate skill with verified assessment or credential evidence
+   */
+  static async upsertCandidateSkillWithEvidence(
+    profileId: string,
+    skillId: string,
+    proficiencyLevel: CandidateSkill['proficiency_level'],
+    verified: boolean,
+    verificationSource?: string
+  ): Promise<CandidateSkill> {
+    const authUser = await this.getAuthenticatedUser();
+    const isDemo = this.isDemoContext(profileId) || !authUser;
+
+    if (isDemo || !isSupabaseConfigured() || !supabase) {
+      return LocalDbService.upsertCandidateSkillWithEvidence(
+        profileId,
+        skillId,
+        proficiencyLevel,
+        verified,
+        verificationSource
+      );
+    }
+
+    try {
+      const targetCandId = await this.resolveCandidateProfileId(profileId);
+      const resolvedSkillId = await this.resolveSkillId(skillId);
+
+      if (targetCandId && resolvedSkillId) {
+        const { data: existingSkill } = await supabase
+          .from('candidate_skills')
+          .select('id, proficiency_level, verified')
+          .eq('candidate_id', targetCandId)
+          .eq('skill_id', resolvedSkillId)
+          .maybeSingle();
+
+        if (existingSkill?.id) {
+          await supabase
+            .from('candidate_skills')
+            .update({
+              proficiency_level: proficiencyLevel,
+              proficiency: proficiencyLevel,
+              verified: Boolean(verified),
+              verification_source: verificationSource || 'Verified Assessment',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingSkill.id);
+        } else {
+          await supabase
+            .from('candidate_skills')
+            .insert({
+              candidate_id: targetCandId,
+              skill_id: resolvedSkillId,
+              proficiency_level: proficiencyLevel,
+              proficiency: proficiencyLevel,
+              source: verificationSource || 'MSIAS Verified Assessment',
+              verified: Boolean(verified),
+              verification_source: verificationSource || 'Verified Assessment',
+              updated_at: new Date().toISOString()
+            });
+        }
+      }
+    } catch (err) {
+      console.warn('Database write notice for verified skill:', err);
+    }
+
+    // Always keep LocalDbService synchronized
+    return LocalDbService.upsertCandidateSkillWithEvidence(
+      profileId,
+      skillId,
+      proficiencyLevel,
+      verified,
+      verificationSource
+    );
+  }
+
+  /**
    * Update proficiency level of an existing skill in Supabase
    */
   static async updateCandidateSkillProficiency(

@@ -55,6 +55,7 @@ export interface CodingProblem {
 
 export interface HistoricalAssessmentRecord {
   id: string;
+  candidateProfileId?: string;
   assessmentId: string;
   skill: SupportedSkill;
   difficulty: AssessmentDifficulty;
@@ -70,6 +71,7 @@ export interface HistoricalAssessmentRecord {
 
 export interface SolvedProblemRecord {
   id: string;
+  candidateProfileId?: string;
   problemId: string;
   title: string;
   language: CodingLanguage;

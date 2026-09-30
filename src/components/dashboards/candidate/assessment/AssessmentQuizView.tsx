@@ -29,6 +29,7 @@ import {
 interface AssessmentQuizViewProps {
   initialSkill?: SupportedSkill;
   initialDifficulty?: AssessmentDifficulty;
+  candidateProfileId?: string;
   onAssessmentCompleted: (record: HistoricalAssessmentRecord, questions: QuizQuestion[], userAnswers: Record<number, number>) => void;
   onCancel: () => void;
 }
@@ -54,6 +55,7 @@ const SKILL_COLORS: Record<SupportedSkill, string> = {
 export const AssessmentQuizView: React.FC<AssessmentQuizViewProps> = ({
   initialSkill = 'Python',
   initialDifficulty = 'Beginner',
+  candidateProfileId,
   onAssessmentCompleted,
   onCancel
 }) => {
@@ -140,7 +142,8 @@ export const AssessmentQuizView: React.FC<AssessmentQuizViewProps> = ({
       selectedDifficulty,
       score,
       questions.length,
-      timeSpent
+      timeSpent,
+      candidateProfileId
     );
 
     setIsSubmitModalOpen(false);

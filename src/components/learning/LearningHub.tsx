@@ -5,7 +5,8 @@ import { CourseCard } from './CourseCard';
 import { CourseWorkspace } from './CourseWorkspace';
 import { CertificationCenterView } from './CertificationCenterView';
 import { LearningPerformanceView } from './LearningPerformanceView';
-import { Card, Button, Badge } from '../ui';
+import { Card, Button, Badge, EmptyState } from '../ui';
+import { useAuth } from '../../context/AuthContext';
 import {
   GraduationCap,
   Search,
@@ -36,19 +37,23 @@ export const LearningHub: React.FC = () => {
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [initialWorkspaceItemId, setInitialWorkspaceItemId] = useState<string | undefined>(undefined);
 
-  const courses = LearningService.getCourses();
-  const allProgress = LearningService.getAllProgress();
-  const personalStats = LearningService.getPersonalStats();
+  const { profile, candidateProfile, isDemoMode } = useAuth();
+  const effectiveCandidateId = candidateProfile?.id || profile?.id || (isDemoMode ? 'prof-cand-001' : '');
 
-  // Find most recently accessed active course
+  const courses = LearningService.getCourses(effectiveCandidateId);
+  const allProgress = LearningService.getAllProgress(effectiveCandidateId);
+  const personalStats = LearningService.getPersonalStats(effectiveCandidateId);
+
+  // Find most recently accessed active course (only if genuinely in progress)
   const mostRecentActiveCourse = useMemo(() => {
     const enrolledWithProgress = courses.filter(c => {
       const p = allProgress[c.id];
-      return c.enrolled && p?.lastAccessedAt && LearningService.getCourseCompletionPercentage(c.id) < 100;
+      const pct = LearningService.getCourseCompletionPercentage(c.id, effectiveCandidateId);
+      return c.enrolled && p?.lastAccessedAt && pct > 0 && pct < 100;
     });
 
     if (enrolledWithProgress.length === 0) {
-      return courses.find(c => c.enrolled) || courses[0];
+      return null;
     }
 
     return enrolledWithProgress.sort((a, b) => {
@@ -56,7 +61,7 @@ export const LearningHub: React.FC = () => {
       const dateB = new Date(allProgress[b.id]?.lastAccessedAt || 0).getTime();
       return dateB - dateA;
     })[0];
-  }, [courses, allProgress]);
+  }, [courses, allProgress, effectiveCandidateId]);
 
   // Categories list
   const categories = ['All', 'Core Engineering', 'Data Structures & Algorithms', 'Databases & Backend', 'Full Stack Development', 'Artificial Intelligence'];
@@ -66,7 +71,7 @@ export const LearningHub: React.FC = () => {
   const filteredCourses = useMemo(() => {
     return courses.filter(course => {
       const progress = allProgress[course.id];
-      const percentage = LearningService.getCourseCompletionPercentage(course.id);
+      const percentage = LearningService.getCourseCompletionPercentage(course.id, effectiveCandidateId);
 
       // Filter by Main Tab
       if (activeNavTab === 'my_learning') {
@@ -106,8 +111,8 @@ export const LearningHub: React.FC = () => {
 
       return true;
     }).sort((a, b) => {
-      const pA = LearningService.getCourseCompletionPercentage(a.id);
-      const pB = LearningService.getCourseCompletionPercentage(b.id);
+      const pA = LearningService.getCourseCompletionPercentage(a.id, effectiveCandidateId);
+      const pB = LearningService.getCourseCompletionPercentage(b.id, effectiveCandidateId);
 
       if (sortBy === 'progress_high') {
         return pB - pA;
@@ -122,7 +127,7 @@ export const LearningHub: React.FC = () => {
         return dateB - dateA;
       }
     });
-  }, [courses, allProgress, activeNavTab, searchQuery, selectedCategory, selectedDifficulty, sortBy]);
+  }, [courses, allProgress, activeNavTab, searchQuery, selectedCategory, selectedDifficulty, sortBy, effectiveCandidateId]);
 
   const handleOpenCourse = (course: LearningCourse, defaultItemId?: string) => {
     setSelectedCourseId(course.id);
@@ -177,13 +182,13 @@ export const LearningHub: React.FC = () => {
           <div className="flex items-center gap-4 shrink-0">
             <div className="text-right space-y-1">
               <div className="text-xs font-bold text-indigo-300">
-                {LearningService.getCourseCompletionPercentage(mostRecentActiveCourse.id)}% Complete
+                {LearningService.getCourseCompletionPercentage(mostRecentActiveCourse.id, effectiveCandidateId)}% Complete
               </div>
               <div className="w-28 bg-white/20 rounded-full h-1.5 overflow-hidden">
                 <div
                   className="bg-indigo-400 h-1.5 rounded-full"
                   style={{
-                    width: `${LearningService.getCourseCompletionPercentage(mostRecentActiveCourse.id)}%`
+                    width: `${LearningService.getCourseCompletionPercentage(mostRecentActiveCourse.id, effectiveCandidateId)}%`
                   }}
                 />
               </div>
@@ -381,16 +386,27 @@ export const LearningHub: React.FC = () => {
 
           {/* Courses Grid */}
           {filteredCourses.length === 0 ? (
-            <Card className="p-12 text-center border-slate-200 bg-white space-y-3">
-              <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
-              <h3 className="text-base font-bold text-slate-900">No Courses Found</h3>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                No learning courses match your current search query or filter selection.
-              </p>
-              <Button size="sm" variant="outline" onClick={handleClearFilters} className="text-xs">
-                Reset All Filters
-              </Button>
-            </Card>
+            activeNavTab === 'my_learning' && !searchQuery ? (
+              <EmptyState
+                icon={<BookOpen className="w-8 h-8 text-indigo-500" />}
+                title="No learning activity yet"
+                description="You have not enrolled in any courses yet. Browse our industry-aligned curriculum below to begin your personalized learning journey."
+                actionText="Explore All Courses"
+                onAction={() => setActiveNavTab('all_courses')}
+                className="my-6 py-12 bg-white"
+              />
+            ) : (
+              <Card className="p-12 text-center border-slate-200 bg-white space-y-3">
+                <BookOpen className="w-10 h-10 text-slate-300 mx-auto" />
+                <h3 className="text-base font-bold text-slate-900">No Courses Found</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  No learning courses match your current search query or filter selection.
+                </p>
+                <Button size="sm" variant="outline" onClick={handleClearFilters} className="text-xs">
+                  Reset All Filters
+                </Button>
+              </Card>
+            )
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               {filteredCourses.map(course => (
