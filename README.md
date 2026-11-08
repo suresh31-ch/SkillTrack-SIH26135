@@ -8,22 +8,29 @@
 
 AI-Powered Skilling Outcomes & Employment Intelligence Platform
 
-<p align="center">
-  **Beyond Training. Beyond Placement. Measuring Sustainable Employment.**
-</p><p align="center">
-  ![SIH 2026](https://img.shields.io/badge/Smart%20India%20Hackathon-2026-blue?style=for-the-badge)
-  ![Problem Statement](https://img.shields.io/badge/Problem%20Statement-SIH26135-green?style=for-the-badge)
-  ![Team](https://img.shields.io/badge/Team-VISIONERA-purple?style=for-the-badge)
-  ![Category](https://img.shields.io/badge/Category-Software-orange?style=for-the-badge)
-</p><p align="center">
-  <a href="https://skill-track-sih-26135.vercel.app">
-    <strong>🌐 EXPLORE LIVE APPLICATION</strong>
-  </a>
-  &nbsp; | &nbsp;
-  <a href="https://github.com/suresh31-ch/SkillTrack-SIH26135">
-    <strong>💻 GITHUB REPOSITORY</strong>
-  </a>
-</p>---
+
+Beyond Training. Beyond Placement. Measuring Sustainable Employment.
+
+---
+
+Smart India Hackathon 2026
+
+- Problem Statement ID: SIH26135
+- Problem Statement: Difficulties in tracking employment outcomes, skill gaps, and the impact of skilling initiatives
+- Organization: Government of Maharashtra
+- Department: Maharashtra State Innovation Society
+- Category: Software
+- Theme: Miscellaneous
+- Team ID: 142233
+- Team Name: VISIONERA
+
+Explore SkillTrack
+
+- Live Application: https://skill-track-sih-26135.vercel.app
+- GitHub Repository: https://github.com/suresh31-ch/SkillTrack-SIH26135
+
+---
+
 
 📌 1. Project Overview
 
